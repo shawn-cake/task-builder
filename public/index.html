@@ -67,8 +67,29 @@
                 <div class="radio-card-sub">7 subtasks · Copywriting tag</div>
               </div>
             </label>
+            <label class="radio-card">
+              <input type="radio" name="template" value="ai-generate">
+              <div>
+                <div class="radio-card-title">AI Generate</div>
+                <div class="radio-card-sub">Describe it, AI builds it</div>
+              </div>
+            </label>
           </div>
         </fieldset>
+
+        <!-- AI Generate prompt — shown only when AI Generate template is selected -->
+        <div id="ai-generate-panel" hidden>
+          <label for="ai-generate-prompt">Describe the campaign or task</label>
+          <textarea
+            id="ai-generate-prompt"
+            rows="4"
+            placeholder="e.g. Monthly email for a dermatology client — they don't use social media. Include review steps."
+          ></textarea>
+          <div class="status" id="ai-generate-status" aria-live="polite"></div>
+        </div>
+
+        <!-- Standard fields — hidden when AI Generate is selected -->
+        <div id="standard-fields">
 
         <fieldset>
           <legend>Client type</legend>
@@ -111,6 +132,8 @@
           <label for="notes">Wording notes <span class="optional">(optional)</span></label>
           <textarea id="notes" name="notes" rows="3" placeholder="Anything that should change about the subtask wording for this client."></textarea>
         </div>
+
+        </div><!-- end #standard-fields -->
 
         <div class="actions">
           <button type="button" class="ghost" id="back-to-projects">← Pick a different project</button>

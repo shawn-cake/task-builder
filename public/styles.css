@@ -114,6 +114,13 @@ textarea { resize: vertical; }
 .radio-stack { display: flex; flex-direction: column; gap: 8px; }
 .template-row { display: flex; gap: 8px; }
 .template-row .radio-card { flex: 1; }
+
+.ai-generate-panel-wrapper {
+  margin-bottom: 20px;
+}
+#ai-generate-panel { margin-bottom: 20px; }
+#ai-generate-panel label { margin-bottom: 6px; }
+#ai-generate-panel textarea { margin-bottom: 4px; }
 .radio-card {
   display: flex; align-items: flex-start; gap: 12px;
   padding: 12px 16px;

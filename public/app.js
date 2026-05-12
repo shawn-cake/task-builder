@@ -39,6 +39,15 @@ const TEMPLATES = [
       'If this month\'s SEO content is a page update, run page through POP, update as needed, and notify Project & Content Manager',
     ],
   },
+  {
+    id: 'ai-generate',
+    name: 'AI Generate',
+    // Names and subtasks are produced by the AI — no patterns here.
+    tasklistNamePattern: null,
+    parentTaskNamePattern: null,
+    defaultTags: [],
+    subtasks: null,
+  },
 ];
 
 const state = {
@@ -241,7 +250,23 @@ function currentFormVars() {
   return { clientType, monthLabel };
 }
 
+const standardFields = document.getElementById('standard-fields');
+const aiGeneratePanel = document.getElementById('ai-generate-panel');
+const aiGeneratePrompt = document.getElementById('ai-generate-prompt');
+const aiGenerateStatus = document.getElementById('ai-generate-status');
+
+function setAiGenerateMode(isAi) {
+  standardFields.hidden = isAi;
+  aiGeneratePanel.hidden = !isAi;
+  // Update the submit button label to reflect the mode.
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.textContent = isAi ? 'Generate preview →' : 'Preview tasks →';
+  // In AI mode, the tasklist name preview is n/a; clear it.
+  if (isAi) tasklistNameSub.textContent = '(AI will generate)';
+}
+
 function updateTasklistPreview() {
+  if (state.selectedTemplate.id === 'ai-generate') return;
   const vars = currentFormVars();
   tasklistNameSub.textContent = fillPattern(state.selectedTemplate.tasklistNamePattern, vars);
 }
@@ -250,6 +275,7 @@ function updateTasklistPreview() {
 form.addEventListener('change', (e) => {
   if (e.target.name === 'template') {
     state.selectedTemplate = TEMPLATES.find((t) => t.id === e.target.value) ?? TEMPLATES[0];
+    setAiGenerateMode(state.selectedTemplate.id === 'ai-generate');
     updateTasklistPreview();
   }
 });
@@ -272,9 +298,7 @@ document.getElementById('back-to-projects').addEventListener('click', () => {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const vars = currentFormVars();
-  // When creating a new project, there's nothing existing to pick from —
-  // force tasklist mode to "new" regardless of which radio is checked.
+
   const tlMode =
     state.projectMode === 'new'
       ? 'new'
@@ -285,8 +309,70 @@ form.addEventListener('submit', async (e) => {
     return;
   }
 
-  const notes = document.getElementById('notes').value.trim();
   const submitBtn = form.querySelector('button[type="submit"]');
+
+  // ===== AI Generate path =====
+  if (state.selectedTemplate.id === 'ai-generate') {
+    const description = aiGeneratePrompt.value.trim();
+    if (!description) {
+      setStatus(aiGenerateStatus, 'Add a description first.', true);
+      aiGeneratePrompt.focus();
+      return;
+    }
+    submitBtn.disabled = true;
+    const originalLabel = submitBtn.textContent;
+    submitBtn.textContent = 'Generating…';
+    setStatus(aiGenerateStatus, 'Generating your tasklist…');
+    try {
+      const res = await fetch('/api/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'design',
+          description,
+          projectName: state.selectedProject?.name ?? state.newProjectDraft?.name,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setStatus(aiGenerateStatus, `Error: ${result.error || res.statusText}`, true);
+        return;
+      }
+      setStatus(aiGenerateStatus, '');
+      state.preview = {
+        projectMode: state.projectMode,
+        newProject: state.projectMode === 'new' ? { ...state.newProjectDraft } : null,
+        tasklistMode: tlMode,
+        tasklistName: result.tasklistName,
+        existingTasklistId: tlMode === 'existing' ? Number(existingSelect.value) : null,
+        existingTasklistName:
+          tlMode === 'existing'
+            ? state.existingTasklists.find((tl) => tl.id === Number(existingSelect.value))?.name
+            : null,
+        parentTaskName: result.parentTaskName,
+        subtasks: result.subtasks,
+        templateId: 'ai-generate',
+        templateName: 'AI Generate',
+        tags: [],
+        notes: description,
+        monthLabel: '',
+        clientType: '',
+        aiFallback: false,
+      };
+      renderPreview();
+      showScreen('preview');
+    } catch (err) {
+      setStatus(aiGenerateStatus, `Error: ${err.message}`, true);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalLabel;
+    }
+    return;
+  }
+
+  // ===== Standard template path =====
+  const vars = currentFormVars();
+  const notes = document.getElementById('notes').value.trim();
 
   // Run the AI tune pass only when the PM actually wrote notes. Empty notes
   // = no work for the model to do; skip the call and save the round-trip.
@@ -613,7 +699,9 @@ document.getElementById('start-over').addEventListener('click', () => {
   setRegeneratePanelOpen(false);
   confirmBtn.disabled = false;
   state.selectedTemplate = TEMPLATES[0];
-  // Reset template radio to first option
+  aiGeneratePrompt.value = '';
+  setStatus(aiGenerateStatus, '');
+  setAiGenerateMode(false);
   const firstTemplateRadio = form.querySelector('input[name="template"][value="email-campaign"]');
   if (firstTemplateRadio) firstTemplateRadio.checked = true;
   setProjectMode('existing');
