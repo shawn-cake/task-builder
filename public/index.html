@@ -51,6 +51,26 @@
 
       <form id="campaign-form">
         <fieldset>
+          <legend>Template</legend>
+          <div class="template-row">
+            <label class="radio-card">
+              <input type="radio" name="template" value="email-campaign" checked>
+              <div>
+                <div class="radio-card-title">Email Campaign</div>
+                <div class="radio-card-sub">9 subtasks · Email tag</div>
+              </div>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="template" value="seo-blog-content">
+              <div>
+                <div class="radio-card-title">SEO Blog Content</div>
+                <div class="radio-card-sub">7 subtasks · Copywriting tag</div>
+              </div>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset>
           <legend>Client type</legend>
           <div class="radio-row">
             <label><input type="radio" name="clientType" value="C" checked> <span>C</span></label>
@@ -89,7 +109,7 @@
 
         <div class="field">
           <label for="notes">Wording notes <span class="optional">(optional)</span></label>
-          <textarea id="notes" name="notes" rows="3" placeholder="Anything that should change about the subtask wording for this client. Saved for the AI layer — not used yet."></textarea>
+          <textarea id="notes" name="notes" rows="3" placeholder="Anything that should change about the subtask wording for this client."></textarea>
         </div>
 
         <div class="actions">

@@ -19,13 +19,13 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const MODEL = 'claude-haiku-4-5';
 
-const SYSTEM_TUNE = `You help internal project managers at a marketing agency customize the subtask wording for a recurring tasklist in their project management tool. Your output is internal PM-facing operational text, not customer-facing copy.
+const SYSTEM_TUNE = `You help internal project managers at a marketing agency customize the subtask wording for recurring tasklists in their project management tool. Your output is internal PM-facing operational text, not customer-facing copy.
 
 Rules:
 - Return EXACTLY the same number of subtasks as you receive, in the same order. Never add or remove subtasks — only adjust wording.
 - Only change a subtask's wording if the PM's notes give a concrete reason. If a subtask doesn't need changes, return it verbatim.
 - If a subtask references something the client doesn't have (e.g., notes say "no specials page"), keep the subtask but adjust the wording to acknowledge that — e.g., "Update specials page if applicable; otherwise skip." Do not drop the subtask.
-- Preserve "[Project manager]" prefixes and any other bracketed conventions.
+- Preserve "[Project manager]", "[Copywriter]", and any other bracketed role prefixes exactly as given.
 - Keep wording crisp and action-oriented; this is internal text, not client-facing.`;
 
 const SYSTEM_GENERATE = `You help internal project managers at a marketing agency compose a tasklist for a recurring or one-off marketing campaign. Your output is internal PM-facing operational text.
@@ -112,7 +112,8 @@ function validate(body) {
 }
 
 function buildContext(body) {
-  return `Client / project: ${body.projectName ?? '(unspecified)'}
+  return `Template: ${body.templateName ?? '(unspecified)'}
+Client / project: ${body.projectName ?? '(unspecified)'}
 Month: ${body.monthLabel ?? '(unspecified)'}
 Client type: ${body.clientType ?? '(unspecified)'}`;
 }

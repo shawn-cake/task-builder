@@ -112,6 +112,8 @@ textarea { resize: vertical; }
 }
 
 .radio-stack { display: flex; flex-direction: column; gap: 8px; }
+.template-row { display: flex; gap: 8px; }
+.template-row .radio-card { flex: 1; }
 .radio-card {
   display: flex; align-items: flex-start; gap: 12px;
   padding: 12px 16px;

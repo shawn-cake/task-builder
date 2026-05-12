@@ -4,24 +4,42 @@
 // The email-campaign template is hardcoded here for Phase 1. When more
 // templates are added it will move to its own module/JSON file.
 
-const TEMPLATE = {
-  id: 'email-campaign',
-  name: 'Email Campaign',
-  tasklistNamePattern: 'SEO. {clientType}. {monthLabel} Email Campaign',
-  parentTaskNamePattern: '{monthLabel} Email Campaign',
-  defaultTags: [{ id: 81162, name: 'Email' }],
-  subtasks: [
-    'Develop text for email and share doc for internal review',
-    'Tag Andi for review & model image options',
-    'Proofread newsletter document & find model image options',
-    'Test internally',
-    '[Project manager] Check with client for email addresses to add',
-    'Send test to practice for approval',
-    'Update specials page, add to GBP, & notify Ashley for social clients',
-    'Send newsletter during the first week of the month',
-    'Send reminder newsletter during the third week of the month; change subject line',
-  ],
-};
+const TEMPLATES = [
+  {
+    id: 'email-campaign',
+    name: 'Email Campaign',
+    tasklistNamePattern: 'SEO. {clientType}. {monthLabel} Email Campaign',
+    parentTaskNamePattern: '{monthLabel} Email Campaign',
+    defaultTags: [{ id: 81162, name: 'Email' }],
+    subtasks: [
+      'Develop text for email and share doc for internal review',
+      'Tag Andi for review & model image options',
+      'Proofread newsletter document & find model image options',
+      'Test internally',
+      '[Project manager] Check with client for email addresses to add',
+      'Send test to practice for approval',
+      'Update specials page, add to GBP, & notify Ashley for social clients',
+      'Send newsletter during the first week of the month',
+      'Send reminder newsletter during the third week of the month; change subject line',
+    ],
+  },
+  {
+    id: 'seo-blog-content',
+    name: 'SEO Blog Content',
+    tasklistNamePattern: 'SEO. {clientType}. {monthLabel} SEO Blog Content',
+    parentTaskNamePattern: '[Copywriter] SEO. {clientType}. {monthLabel} SEO Blog Content',
+    defaultTags: [{ id: 62460, name: 'Copywriting' }],
+    subtasks: [
+      '[Copywriter] Write the blog post using template, tag Madison for image options, and comment for internal review.',
+      '[Copywriter] Are there any images we can include?',
+      'Choose, prep, & upload blog image with appropriate title. Make sure all caption and stock photo file data has been removed.',
+      'Send the internally approved blog post to client for approval. CC PM in email to the practice.',
+      'Once we have final approval of all edits, draft the post, adding all metadata, one category, and all the tags. Ensure pull quote has been added & formatted correctly. Follow hub-style guidelines for appropriate blogs. Do not publish more than one post in a 24-hour period.',
+      'Post the blog post to GMB.',
+      'If this month\'s SEO content is a page update, run page through POP, update as needed, and notify Project & Content Manager',
+    ],
+  },
+];
 
 const state = {
   projectMode: 'existing',      // 'existing' (pick from list) | 'new' (create new project on confirm)
@@ -29,6 +47,7 @@ const state = {
   newProjectDraft: null,        // { name, description } — captured before preview when projectMode === 'new'
   existingTasklists: [],        // for the currently selected project
   preview: null,                // { tasklistName, parentTaskName, subtasks, tasklistMode, ... }
+  selectedTemplate: TEMPLATES[0],
 };
 
 // ===== screen routing =====
@@ -224,8 +243,16 @@ function currentFormVars() {
 
 function updateTasklistPreview() {
   const vars = currentFormVars();
-  tasklistNameSub.textContent = fillPattern(TEMPLATE.tasklistNamePattern, vars);
+  tasklistNameSub.textContent = fillPattern(state.selectedTemplate.tasklistNamePattern, vars);
 }
+
+// Template selection
+form.addEventListener('change', (e) => {
+  if (e.target.name === 'template') {
+    state.selectedTemplate = TEMPLATES.find((t) => t.id === e.target.value) ?? TEMPLATES[0];
+    updateTasklistPreview();
+  }
+});
 
 // React to form changes that affect the preview name
 form.addEventListener('change', updateTasklistPreview);
@@ -263,7 +290,7 @@ form.addEventListener('submit', async (e) => {
 
   // Run the AI tune pass only when the PM actually wrote notes. Empty notes
   // = no work for the model to do; skip the call and save the round-trip.
-  let subtasks = [...TEMPLATE.subtasks];
+  let subtasks = [...state.selectedTemplate.subtasks];
   let aiFallback = false;
   if (notes) {
     submitBtn.disabled = true;
@@ -277,6 +304,7 @@ form.addEventListener('submit', async (e) => {
           mode: 'tune',
           subtasks,
           notes,
+          templateName: state.selectedTemplate.name,
           projectName: state.selectedProject?.name ?? state.newProjectDraft?.name,
           monthLabel: vars.monthLabel,
           clientType: vars.clientType,
@@ -309,7 +337,9 @@ form.addEventListener('submit', async (e) => {
         : null,
     parentTaskName: fillPattern(TEMPLATE.parentTaskNamePattern, vars),
     subtasks,
-    tags: TEMPLATE.defaultTags,
+    templateId: state.selectedTemplate.id,
+    templateName: state.selectedTemplate.name,
+    tags: state.selectedTemplate.defaultTags,
     notes,
     monthLabel: vars.monthLabel,
     clientType: vars.clientType,
@@ -582,6 +612,10 @@ document.getElementById('start-over').addEventListener('click', () => {
   regenerateDesc.value = '';
   setRegeneratePanelOpen(false);
   confirmBtn.disabled = false;
+  state.selectedTemplate = TEMPLATES[0];
+  // Reset template radio to first option
+  const firstTemplateRadio = form.querySelector('input[name="template"][value="email-campaign"]');
+  if (firstTemplateRadio) firstTemplateRadio.checked = true;
   setProjectMode('existing');
   showScreen('pick-project');
 });
