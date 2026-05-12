@@ -10,19 +10,102 @@
   <main>
     <header>
       <h1>Teamwork Task Tool</h1>
-      <p class="subtitle">Pick a project to start.</p>
+      <p class="subtitle" id="subtitle">Pick a project to start.</p>
     </header>
 
-    <section class="project-picker">
+    <!-- Screen 1: pick project -->
+    <section class="screen" id="screen-pick-project" data-active="true">
       <label for="search">Search projects</label>
-      <input
-        type="search"
-        id="search"
-        placeholder="e.g. mandellbrown"
-        autocomplete="off"
-      >
-      <div id="status" class="status" aria-live="polite"></div>
-      <ul id="results" class="results"></ul>
+      <input type="search" id="search" placeholder="e.g. mandellbrown" autocomplete="off">
+      <div class="status" id="search-status" aria-live="polite"></div>
+      <ul class="results" id="project-results"></ul>
+    </section>
+
+    <!-- Screen 2: form -->
+    <section class="screen" id="screen-form">
+      <div class="selected-banner" id="selected-project-banner"></div>
+
+      <form id="campaign-form">
+        <fieldset>
+          <legend>Client type</legend>
+          <div class="radio-row">
+            <label><input type="radio" name="clientType" value="C" checked> <span>C</span></label>
+            <label><input type="radio" name="clientType" value="H"> <span>H</span></label>
+            <label><input type="radio" name="clientType" value="G"> <span>G</span></label>
+          </div>
+          <p class="hint">Naming convention only — does not affect the subtasks.</p>
+        </fieldset>
+
+        <div class="field">
+          <label for="month">Month</label>
+          <input type="month" id="month" name="month" required>
+        </div>
+
+        <fieldset>
+          <legend>Tasklist</legend>
+          <div class="radio-stack">
+            <label class="radio-card">
+              <input type="radio" name="tasklistMode" value="new" checked>
+              <div>
+                <div class="radio-card-title">Create new tasklist</div>
+                <div class="radio-card-sub" id="preview-tasklist-name">SEO. C. May 2026 Email Campaign</div>
+              </div>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="tasklistMode" value="existing">
+              <div>
+                <div class="radio-card-title">Add to existing tasklist</div>
+                <select id="existing-tasklist" disabled>
+                  <option value="">Loading…</option>
+                </select>
+              </div>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="field">
+          <label for="notes">Wording notes <span class="optional">(optional)</span></label>
+          <textarea id="notes" name="notes" rows="3" placeholder="Anything that should change about the subtask wording for this client. Saved for the AI layer — not used yet."></textarea>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="ghost" id="back-to-projects">← Pick a different project</button>
+          <button type="submit" class="primary">Preview tasks →</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Screen 3: preview -->
+    <section class="screen" id="screen-preview">
+      <div class="preview-summary">
+        <div class="preview-row"><span class="preview-label">Project</span><span id="preview-project"></span></div>
+        <div class="preview-row"><span class="preview-label">Tasklist</span><span id="preview-tasklist"></span></div>
+        <div class="preview-row"><span class="preview-label">Parent task</span><input type="text" id="preview-parent-task" class="inline-edit"></div>
+      </div>
+
+      <h3>Subtasks</h3>
+      <p class="hint">Click any subtask to edit. Deleting all text removes it.</p>
+      <ol class="subtasks" id="preview-subtasks"></ol>
+
+      <div class="status" id="preview-status" aria-live="polite"></div>
+
+      <div class="actions">
+        <button type="button" class="ghost" id="back-to-form">← Back</button>
+        <button type="button" class="primary" id="confirm-create">Create in Teamwork</button>
+      </div>
+    </section>
+
+    <!-- Screen 4: success -->
+    <section class="screen" id="screen-success">
+      <div class="success-icon" aria-hidden="true">✓</div>
+      <h2>Tasks created</h2>
+      <p id="success-summary"></p>
+      <div id="success-partial" class="warning"></div>
+
+      <div class="actions">
+        <a id="success-link" class="primary as-button" target="_blank" rel="noopener">Open tasklist in Teamwork ↗</a>
+        <button type="button" class="ghost" id="start-over">Create another</button>
+      </div>
     </section>
   </main>
 
