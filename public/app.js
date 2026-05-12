@@ -24,7 +24,9 @@ const TEMPLATE = {
 };
 
 const state = {
-  selectedProject: null,        // { id, name }
+  projectMode: 'existing',      // 'existing' (pick from list) | 'new' (create new project on confirm)
+  selectedProject: null,        // { id, name } — set after picking (existing) or creating (new). For 'new', id is null until confirm.
+  newProjectDraft: null,        // { name, description } — captured before preview when projectMode === 'new'
   existingTasklists: [],        // for the currently selected project
   preview: null,                // { tasklistName, parentTaskName, subtasks, tasklistMode, ... }
 };
@@ -45,11 +47,31 @@ function showScreen(id) {
   }[id] ?? '';
 }
 
-// ===== screen 1: project picker =====
+// ===== screen 1: project picker (existing OR new) =====
 
 const searchInput = document.getElementById('search');
 const projectResults = document.getElementById('project-results');
 const searchStatus = document.getElementById('search-status');
+const modeToggleBtns = document.querySelectorAll('.mode-toggle-btn');
+const modePanels = document.querySelectorAll('.mode-panel');
+const newProjectForm = document.getElementById('new-project-form');
+const newProjectNameInput = document.getElementById('new-project-name');
+const newProjectDescInput = document.getElementById('new-project-description');
+const tasklistFieldset = document.getElementById('tasklist-fieldset');
+
+function setProjectMode(mode) {
+  state.projectMode = mode;
+  for (const btn of modeToggleBtns) {
+    btn.setAttribute('aria-selected', String(btn.dataset.mode === mode));
+  }
+  for (const panel of modePanels) {
+    panel.dataset.active = String(panel.dataset.modePanel === mode);
+  }
+}
+
+for (const btn of modeToggleBtns) {
+  btn.addEventListener('click', () => setProjectMode(btn.dataset.mode));
+}
 
 let debounceTimer = null;
 let activeProjectsRequestId = 0;
@@ -116,13 +138,43 @@ const form = document.getElementById('campaign-form');
 }
 
 function selectProject(project) {
+  state.projectMode = 'existing';
   state.selectedProject = project;
+  state.newProjectDraft = null;
   banner.innerHTML = `Selected project: <b></b> <span class="project-id">#${project.id}</span>`;
   banner.querySelector('b').textContent = project.name;
+  tasklistFieldset.hidden = false;
+  // Restore default tasklist mode (the radio markup defaults to "new")
   loadExistingTasklists(project.id);
   updateTasklistPreview();
   showScreen('form');
 }
+
+newProjectForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = newProjectNameInput.value.trim();
+  if (!name) return;
+  state.projectMode = 'new';
+  state.newProjectDraft = {
+    name,
+    description: newProjectDescInput.value.trim(),
+  };
+  // The project doesn't exist in Teamwork yet — show its draft name as
+  // the selected project. Final id is assigned at confirm time.
+  state.selectedProject = { id: null, name };
+  state.existingTasklists = [];
+  banner.innerHTML = `Creating new project: <b></b> <span class="project-id">(new)</span>`;
+  banner.querySelector('b').textContent = name;
+  // No existing tasklists are possible inside a brand-new project — hide
+  // the whole tasklist-mode chooser; we always create a new tasklist.
+  tasklistFieldset.hidden = true;
+  // Force tasklistMode = "new" so updateTasklistPreview / form submit
+  // pick up the right value even though the radios are hidden.
+  const newRadio = form.querySelector('input[name="tasklistMode"][value="new"]');
+  if (newRadio) newRadio.checked = true;
+  updateTasklistPreview();
+  showScreen('form');
+});
 
 async function loadExistingTasklists(projectId) {
   existingSelect.disabled = true;
@@ -194,19 +246,26 @@ document.getElementById('back-to-projects').addEventListener('click', () => {
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const vars = currentFormVars();
-  const mode = form.querySelector('input[name="tasklistMode"]:checked').value;
+  // When creating a new project, there's nothing existing to pick from —
+  // force tasklist mode to "new" regardless of which radio is checked.
+  const tlMode =
+    state.projectMode === 'new'
+      ? 'new'
+      : form.querySelector('input[name="tasklistMode"]:checked').value;
 
-  if (mode === 'existing' && !existingSelect.value) {
+  if (tlMode === 'existing' && !existingSelect.value) {
     alert('Pick an existing tasklist or switch to "Create new".');
     return;
   }
 
   state.preview = {
-    tasklistMode: mode,
+    projectMode: state.projectMode,
+    newProject: state.projectMode === 'new' ? { ...state.newProjectDraft } : null,
+    tasklistMode: tlMode,
     tasklistName: fillPattern(TEMPLATE.tasklistNamePattern, vars),
-    existingTasklistId: mode === 'existing' ? Number(existingSelect.value) : null,
+    existingTasklistId: tlMode === 'existing' ? Number(existingSelect.value) : null,
     existingTasklistName:
-      mode === 'existing'
+      tlMode === 'existing'
         ? state.existingTasklists.find((tl) => tl.id === Number(existingSelect.value))?.name
         : null,
     parentTaskName: fillPattern(TEMPLATE.parentTaskNamePattern, vars),
@@ -226,11 +285,23 @@ const previewTasklist = document.getElementById('preview-tasklist');
 const previewParentTask = document.getElementById('preview-parent-task');
 const previewSubtasks = document.getElementById('preview-subtasks');
 const previewStatus = document.getElementById('preview-status');
+const previewNewProjectRow = document.getElementById('preview-new-project-row');
+const previewNewProject = document.getElementById('preview-new-project');
 const confirmBtn = document.getElementById('confirm-create');
 
 function renderPreview() {
   const p = state.preview;
-  previewProject.textContent = `${state.selectedProject.name} #${state.selectedProject.id}`;
+  if (p.projectMode === 'new') {
+    previewNewProjectRow.hidden = false;
+    const desc = p.newProject.description
+      ? ` — ${p.newProject.description}`
+      : '';
+    previewNewProject.textContent = `${p.newProject.name}  (new)${desc}`;
+    previewProject.textContent = '(will be created above)';
+  } else {
+    previewNewProjectRow.hidden = true;
+    previewProject.textContent = `${state.selectedProject.name} #${state.selectedProject.id}`;
+  }
   previewTasklist.textContent =
     p.tasklistMode === 'new'
       ? `${p.tasklistName}  (new)`
@@ -287,6 +358,35 @@ confirmBtn.addEventListener('click', async () => {
   }
 
   confirmBtn.disabled = true;
+
+  // Step A — create the Teamwork project, if this is "new project" mode.
+  // Done as a separate request so the existing /api/create flow stays
+  // untouched. If project creation fails, nothing downstream happens.
+  let createdProject = null;
+  if (p.projectMode === 'new') {
+    setStatus(previewStatus, `Creating project "${p.newProject.name}"…`);
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(p.newProject),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setStatus(previewStatus, `Error creating project: ${result.error || res.statusText}`, true);
+        confirmBtn.disabled = false;
+        return;
+      }
+      createdProject = result; // { id, name, url }
+      state.selectedProject = { id: result.id, name: result.name };
+    } catch (err) {
+      setStatus(previewStatus, `Network error creating project: ${err.message}`, true);
+      confirmBtn.disabled = false;
+      return;
+    }
+  }
+
+  // Step B — create tasklist + parent task + subtasks (existing flow, unchanged).
   setStatus(previewStatus, 'Creating tasklist, parent task, and subtasks…');
 
   const payload = {
@@ -310,11 +410,14 @@ confirmBtn.addEventListener('click', async () => {
     });
     const result = await res.json();
     if (!res.ok) {
-      setStatus(previewStatus, `Error: ${result.error || res.statusText}`, true);
+      const projectNote = createdProject
+        ? ` (project "${createdProject.name}" was created — open it: ${createdProject.url})`
+        : '';
+      setStatus(previewStatus, `Error: ${result.error || res.statusText}${projectNote}`, true);
       confirmBtn.disabled = false;
       return;
     }
-    renderSuccess(result);
+    renderSuccess(result, createdProject);
     showScreen('success');
   } catch (err) {
     setStatus(previewStatus, `Network error: ${err.message}`, true);
@@ -327,11 +430,14 @@ confirmBtn.addEventListener('click', async () => {
 const successSummary = document.getElementById('success-summary');
 const successPartial = document.getElementById('success-partial');
 const successLink = document.getElementById('success-link');
+const successProjectLink = document.getElementById('success-project-link');
 
-function renderSuccess(result) {
+function renderSuccess(result, createdProject) {
   const subtaskCount = result.subtaskIds?.length ?? 0;
-  successSummary.textContent =
-    `Created 1 parent task and ${subtaskCount} subtask${subtaskCount === 1 ? '' : 's'} in “${state.selectedProject.name}”.`;
+  const prefix = createdProject
+    ? `Created project “${createdProject.name}”, plus 1 parent task and ${subtaskCount} subtask${subtaskCount === 1 ? '' : 's'}.`
+    : `Created 1 parent task and ${subtaskCount} subtask${subtaskCount === 1 ? '' : 's'} in “${state.selectedProject.name}”.`;
+  successSummary.textContent = prefix;
   if (result.partial) {
     const lines = result.errors.map((e) => `• ${e.subtask}: ${e.error}`).join('\n');
     successPartial.textContent = `Some subtasks failed:\n${lines}`;
@@ -339,13 +445,24 @@ function renderSuccess(result) {
     successPartial.textContent = '';
   }
   successLink.href = result.tasklistUrl;
+  if (createdProject?.url) {
+    successProjectLink.href = createdProject.url;
+    successProjectLink.hidden = false;
+  } else {
+    successProjectLink.hidden = true;
+  }
 }
 
 document.getElementById('start-over').addEventListener('click', () => {
   // Reset to project picker; keep project results loaded
   state.preview = null;
+  state.newProjectDraft = null;
+  state.selectedProject = null;
   document.getElementById('notes').value = '';
+  newProjectNameInput.value = '';
+  newProjectDescInput.value = '';
   confirmBtn.disabled = false;
+  setProjectMode('existing');
   showScreen('pick-project');
 });
 

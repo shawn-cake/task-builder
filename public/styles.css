@@ -38,6 +38,36 @@ h3 { margin: 24px 0 8px; font-size: 15px; font-weight: 600; text-transform: uppe
 .screen { display: none; }
 .screen[data-active="true"] { display: block; }
 
+/* ---------- mode toggle (segmented control) ---------- */
+
+.mode-toggle {
+  display: inline-flex;
+  padding: 4px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+.mode-toggle-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  padding: 8px 14px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mode-toggle-btn:hover { color: var(--fg); }
+.mode-toggle-btn[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.mode-toggle-btn[aria-selected="true"]:hover { color: var(--accent-fg); }
+
+.mode-panel { display: none; }
+.mode-panel[data-active="true"] { display: block; }
+
 /* ---------- form basics ---------- */
 
 label, legend {

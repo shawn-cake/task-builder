@@ -3,7 +3,7 @@
 // Everything else falls through to env.ASSETS, which serves the static
 // frontend from public/.
 
-import { onRequestGet as getProjects } from '../functions/api/projects.js';
+import { onRequestGet as getProjects, onRequestPost as createProject } from '../functions/api/projects.js';
 import { onRequestGet as getTasklists } from '../functions/api/projects/[projectId]/tasklists.js';
 import { onRequestPost as createTasks } from '../functions/api/create.js';
 
@@ -14,6 +14,10 @@ export default {
 
     if (pathname === '/api/projects' && method === 'GET') {
       return getProjects({ request, env });
+    }
+
+    if (pathname === '/api/projects' && method === 'POST') {
+      return createProject({ request, env });
     }
 
     const tasklistsMatch = pathname.match(/^\/api\/projects\/([^/]+)\/tasklists\/?$/);

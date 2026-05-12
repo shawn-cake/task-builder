@@ -1,5 +1,9 @@
 // GET /api/projects?search=<term>
 // Returns active Teamwork projects, optionally filtered by name.
+//
+// POST /api/projects
+// Creates a brand-new Teamwork project from { name, description? }.
+// Used by the "one project per client, SOW tracked via tags" mode.
 // Secrets stay on the server — the browser never sees TEAMWORK_API_TOKEN.
 
 export async function onRequestGet({ request, env }) {
@@ -43,4 +47,56 @@ export async function onRequestGet({ request, env }) {
     projects,
     total: data.meta?.page?.count ?? projects.length,
   });
+}
+
+export async function onRequestPost({ request, env }) {
+  const { TEAMWORK_DOMAIN, TEAMWORK_API_TOKEN } = env;
+  if (!TEAMWORK_DOMAIN || !TEAMWORK_API_TOKEN) {
+    return Response.json({ error: 'Server not configured.' }, { status: 500 });
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: 'Invalid JSON body.' }, { status: 400 });
+  }
+
+  const name = typeof body?.name === 'string' ? body.name.trim() : '';
+  if (!name) {
+    return Response.json({ error: 'Project name is required.' }, { status: 400 });
+  }
+  const description =
+    typeof body?.description === 'string' ? body.description.trim() : '';
+
+  // v1 endpoint — Teamwork does not expose project create on v3.
+  // Same kebab/v1 pattern as tasklist creation.
+  const auth = btoa(`${TEAMWORK_API_TOKEN}:x`);
+  const payload = { project: { name } };
+  if (description) payload.project.description = description;
+
+  const res = await fetch(`https://${TEAMWORK_DOMAIN}/projects.json`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    return Response.json(
+      { error: `Teamwork project create failed (${res.status}): ${text}` },
+      { status: res.status === 401 ? 502 : 502 }
+    );
+  }
+
+  const data = await res.json().catch(() => ({}));
+  const id = Number(data.id ?? res.headers.get('id'));
+  const url =
+    res.headers.get('Location') ??
+    `https://${TEAMWORK_DOMAIN}/projects/${id}`;
+
+  return Response.json({ id, name, url }, { status: 201 });
 }
