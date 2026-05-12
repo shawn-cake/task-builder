@@ -329,13 +329,13 @@ form.addEventListener('submit', async (e) => {
     projectMode: state.projectMode,
     newProject: state.projectMode === 'new' ? { ...state.newProjectDraft } : null,
     tasklistMode: tlMode,
-    tasklistName: fillPattern(TEMPLATE.tasklistNamePattern, vars),
+    tasklistName: fillPattern(state.selectedTemplate.tasklistNamePattern, vars),
     existingTasklistId: tlMode === 'existing' ? Number(existingSelect.value) : null,
     existingTasklistName:
       tlMode === 'existing'
         ? state.existingTasklists.find((tl) => tl.id === Number(existingSelect.value))?.name
         : null,
-    parentTaskName: fillPattern(TEMPLATE.parentTaskNamePattern, vars),
+    parentTaskName: fillPattern(state.selectedTemplate.parentTaskNamePattern, vars),
     subtasks,
     templateId: state.selectedTemplate.id,
     templateName: state.selectedTemplate.name,
