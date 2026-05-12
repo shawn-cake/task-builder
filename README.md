@@ -40,20 +40,19 @@ npm run dev
 
 Wrangler serves the `public/` directory and runs `functions/` as serverless endpoints at `http://localhost:8788`.
 
-## Secrets
+## Secrets and config
 
-All credentials are server-side only and **never appear in committed code, frontend JS, or browser network requests**. They are stored as:
+Sensitive credentials are server-side only and **never appear in committed code, frontend JS, or browser network requests**. Non-sensitive config (just the Teamwork domain) lives in `wrangler.jsonc` so `wrangler deploy` doesn't wipe it between releases.
 
-- **Locally:** `.dev.vars` (gitignored), loaded automatically by Wrangler.
-- **Production:** Cloudflare Pages dashboard → Settings → Environment variables.
+| Name | Where it lives in prod | Why |
+|---|---|---|
+| `TEAMWORK_DOMAIN` | `wrangler.jsonc` `vars` block | Not sensitive; version-controlled; survives every deploy |
+| `TEAMWORK_API_TOKEN` | Cloudflare dashboard → Variables and Secrets → type **Secret** | Sensitive; encrypted; never in the repo |
+| `ANTHROPIC_API_KEY` | Cloudflare dashboard → Variables and Secrets → type **Secret** (when AI layer ships) | Sensitive; encrypted; never in the repo |
 
-Variables:
+**Locally:** all three live in `.dev.vars` (gitignored), loaded automatically by Wrangler so local dev matches prod.
 
-| Name | Purpose |
-|---|---|
-| `TEAMWORK_DOMAIN` | Teamwork host, e.g. `my.cakewebsites.com` |
-| `TEAMWORK_API_TOKEN` | Personal API token, used as HTTP Basic username |
-| `ANTHROPIC_API_KEY` | Anthropic API key for wording customization |
+**Important:** dashboard-set **Text** (non-secret) variables are erased every time `wrangler deploy` runs unless they're also declared in `wrangler.jsonc`. Always put non-secret values in `wrangler.jsonc`. Use the dashboard Secret type only for actual secrets.
 
 ## Deployment
 

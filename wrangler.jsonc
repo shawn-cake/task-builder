@@ -6,5 +6,11 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
+  },
+  // Non-secret runtime config. Lives in code so `wrangler deploy` doesn't
+  // wipe it the way it wipes dashboard-set Text variables. The actual
+  // token (TEAMWORK_API_TOKEN) is a dashboard Secret — never committed.
+  "vars": {
+    "TEAMWORK_DOMAIN": "my.cakewebsites.com"
   }
 }

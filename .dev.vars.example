@@ -4,6 +4,8 @@
 # Settings → Environment variables.
 
 # Teamwork instance domain — host only, no scheme, no trailing slash.
+# In production this comes from `wrangler.jsonc` (vars block), not the
+# Cloudflare dashboard. Setting it here keeps local dev matching prod.
 TEAMWORK_DOMAIN=my.cakewebsites.com
 
 # Teamwork personal API token (Profile → Edit My Details → API & Mobile).
