@@ -1,8 +1,14 @@
 # Changelog
 
-All notable changes to the Teamwork Task Tool are recorded here.
+All notable changes to Task Builder are recorded here.
 
 ## Unreleased
+
+### Changed
+- App renamed from **Teamwork Task Tool** to **Task Builder**. Updated page
+  title, h1, README, and this file.
+
+
 
 ### Added
 - **"Create new project" mode** on the project picker screen. PMs can now spin up
