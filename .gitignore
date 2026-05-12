@@ -1,0 +1,16 @@
+node_modules/
+.DS_Store
+
+# Cloudflare Wrangler local dev — holds real secrets, never commit
+.dev.vars
+.wrangler/
+
+# Generic env files in case anyone drops one in
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.vscode/
+.idea/
+*.log

@@ -1,0 +1,14 @@
+# Copy this file to `.dev.vars` (which is gitignored) and fill in real values.
+# Wrangler loads `.dev.vars` automatically when running `npm run dev`.
+# In production, set the same variables in the Cloudflare Pages dashboard under
+# Settings → Environment variables.
+
+# Teamwork instance domain — host only, no scheme, no trailing slash.
+TEAMWORK_DOMAIN=my.cakewebsites.com
+
+# Teamwork personal API token (Profile → Edit My Details → API & Mobile).
+# Used as the HTTP Basic username; password is any string (we send "x").
+TEAMWORK_API_TOKEN=
+
+# Anthropic API key for the wording-customization step.
+ANTHROPIC_API_KEY=
