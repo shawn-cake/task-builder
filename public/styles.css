@@ -237,6 +237,42 @@ button.ghost:hover { color: var(--fg); }
 .inline-edit:hover { background: var(--row-hover); }
 .inline-edit:focus { background: white; border-color: var(--border-strong); }
 
+.subtasks-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 24px 0 8px;
+}
+.subtasks-header h3 { margin: 0; }
+button.ghost.small {
+  font-size: 13px;
+  padding: 4px 10px;
+}
+button.ghost.small[aria-expanded="true"] {
+  color: var(--accent);
+}
+
+.regenerate-panel {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 0 0 12px;
+}
+.regenerate-panel label {
+  margin-bottom: 6px;
+}
+.regenerate-panel textarea {
+  margin-bottom: 12px;
+}
+.regenerate-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.regenerate-actions .ghost { margin-right: auto; }
+
 .subtasks {
   list-style: none;
   padding: 0;

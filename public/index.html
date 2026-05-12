@@ -110,8 +110,28 @@
         <div class="preview-row"><span class="preview-label">Parent task</span><input type="text" id="preview-parent-task" class="inline-edit"></div>
       </div>
 
-      <h3>Subtasks</h3>
-      <p class="hint">Click any subtask to edit. Deleting all text removes it.</p>
+      <div class="subtasks-header">
+        <h3>Subtasks</h3>
+        <button type="button" class="ghost small" id="toggle-regenerate" aria-expanded="false">
+          Regenerate from description ▾
+        </button>
+      </div>
+
+      <div class="regenerate-panel" id="regenerate-panel" hidden>
+        <label for="regenerate-description">Describe the tasklist you want</label>
+        <textarea
+          id="regenerate-description"
+          rows="3"
+          placeholder="e.g. Monthly Instagram + Facebook social campaign for a dermatology client — content review, scheduling, reporting."
+        ></textarea>
+        <div class="regenerate-actions">
+          <button type="button" class="ghost" id="regenerate-cancel">Cancel</button>
+          <button type="button" class="primary" id="regenerate-submit">Generate</button>
+        </div>
+        <div class="status" id="regenerate-status" aria-live="polite"></div>
+      </div>
+
+      <p class="hint" id="subtasks-hint">Click any subtask to edit. Deleting all text removes it.</p>
       <ol class="subtasks" id="preview-subtasks"></ol>
 
       <div class="status" id="preview-status" aria-live="polite"></div>

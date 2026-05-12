@@ -3,6 +3,7 @@
   "name": "teamwork-tool",
   "main": "src/index.js",
   "compatibility_date": "2026-05-12",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"

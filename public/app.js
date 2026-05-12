@@ -243,7 +243,7 @@ document.getElementById('back-to-projects').addEventListener('click', () => {
   showScreen('pick-project');
 });
 
-form.addEventListener('submit', (e) => {
+form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const vars = currentFormVars();
   // When creating a new project, there's nothing existing to pick from —
@@ -258,6 +258,45 @@ form.addEventListener('submit', (e) => {
     return;
   }
 
+  const notes = document.getElementById('notes').value.trim();
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  // Run the AI tune pass only when the PM actually wrote notes. Empty notes
+  // = no work for the model to do; skip the call and save the round-trip.
+  let subtasks = [...TEMPLATE.subtasks];
+  let aiFallback = false;
+  if (notes) {
+    submitBtn.disabled = true;
+    const originalLabel = submitBtn.textContent;
+    submitBtn.textContent = 'Tuning subtasks…';
+    try {
+      const res = await fetch('/api/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'tune',
+          subtasks,
+          notes,
+          projectName: state.selectedProject?.name ?? state.newProjectDraft?.name,
+          monthLabel: vars.monthLabel,
+          clientType: vars.clientType,
+        }),
+      });
+      const result = await res.json();
+      if (res.ok && Array.isArray(result.subtasks) && result.subtasks.length > 0) {
+        subtasks = result.subtasks;
+        aiFallback = !!result.fallback;
+      } else {
+        aiFallback = true;
+      }
+    } catch {
+      aiFallback = true;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalLabel;
+    }
+  }
+
   state.preview = {
     projectMode: state.projectMode,
     newProject: state.projectMode === 'new' ? { ...state.newProjectDraft } : null,
@@ -269,9 +308,12 @@ form.addEventListener('submit', (e) => {
         ? state.existingTasklists.find((tl) => tl.id === Number(existingSelect.value))?.name
         : null,
     parentTaskName: fillPattern(TEMPLATE.parentTaskNamePattern, vars),
-    subtasks: [...TEMPLATE.subtasks],
+    subtasks,
     tags: TEMPLATE.defaultTags,
-    notes: document.getElementById('notes').value.trim(),
+    notes,
+    monthLabel: vars.monthLabel,
+    clientType: vars.clientType,
+    aiFallback,
   };
 
   renderPreview();
@@ -333,11 +375,87 @@ function renderPreview() {
     previewSubtasks.appendChild(li);
   });
 
-  setStatus(previewStatus, '');
+  if (state.preview.aiFallback) {
+    setStatus(
+      previewStatus,
+      'AI rewording was unavailable — showing default subtasks. You can still edit them or use "Regenerate from description".',
+      true
+    );
+  } else {
+    setStatus(previewStatus, '');
+  }
 }
 
 previewParentTask.addEventListener('input', () => {
   state.preview.parentTaskName = previewParentTask.value;
+});
+
+// ===== regenerate-from-description (AI generate mode) =====
+
+const toggleRegenerateBtn = document.getElementById('toggle-regenerate');
+const regeneratePanel = document.getElementById('regenerate-panel');
+const regenerateDesc = document.getElementById('regenerate-description');
+const regenerateSubmit = document.getElementById('regenerate-submit');
+const regenerateCancel = document.getElementById('regenerate-cancel');
+const regenerateStatus = document.getElementById('regenerate-status');
+
+function setRegeneratePanelOpen(open) {
+  regeneratePanel.hidden = !open;
+  toggleRegenerateBtn.setAttribute('aria-expanded', String(open));
+  toggleRegenerateBtn.textContent = open
+    ? 'Regenerate from description ▴'
+    : 'Regenerate from description ▾';
+  if (open) {
+    setStatus(regenerateStatus, '');
+    regenerateDesc.focus();
+  }
+}
+
+toggleRegenerateBtn.addEventListener('click', () => {
+  setRegeneratePanelOpen(regeneratePanel.hidden);
+});
+
+regenerateCancel.addEventListener('click', () => {
+  setRegeneratePanelOpen(false);
+});
+
+regenerateSubmit.addEventListener('click', async () => {
+  const description = regenerateDesc.value.trim();
+  if (!description) {
+    setStatus(regenerateStatus, 'Add a short description first.', true);
+    return;
+  }
+  regenerateSubmit.disabled = true;
+  regenerateCancel.disabled = true;
+  setStatus(regenerateStatus, 'Generating subtasks…');
+  try {
+    const res = await fetch('/api/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'generate',
+        description,
+        projectName: state.selectedProject?.name ?? state.newProjectDraft?.name,
+        monthLabel: state.preview.monthLabel,
+        clientType: state.preview.clientType,
+      }),
+    });
+    const result = await res.json();
+    if (!res.ok || !Array.isArray(result.subtasks) || result.subtasks.length === 0) {
+      setStatus(regenerateStatus, `Error: ${result.error || res.statusText}`, true);
+      return;
+    }
+    state.preview.subtasks = result.subtasks;
+    state.preview.aiFallback = false;
+    renderPreview();
+    setRegeneratePanelOpen(false);
+    regenerateDesc.value = '';
+  } catch (err) {
+    setStatus(regenerateStatus, `Network error: ${err.message}`, true);
+  } finally {
+    regenerateSubmit.disabled = false;
+    regenerateCancel.disabled = false;
+  }
 });
 
 document.getElementById('back-to-form').addEventListener('click', () => {
@@ -461,6 +579,8 @@ document.getElementById('start-over').addEventListener('click', () => {
   document.getElementById('notes').value = '';
   newProjectNameInput.value = '';
   newProjectDescInput.value = '';
+  regenerateDesc.value = '';
+  setRegeneratePanelOpen(false);
   confirmBtn.disabled = false;
   setProjectMode('existing');
   showScreen('pick-project');

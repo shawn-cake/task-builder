@@ -6,6 +6,7 @@
 import { onRequestGet as getProjects, onRequestPost as createProject } from '../functions/api/projects.js';
 import { onRequestGet as getTasklists } from '../functions/api/projects/[projectId]/tasklists.js';
 import { onRequestPost as createTasks } from '../functions/api/create.js';
+import { onRequestPost as previewSubtasks } from '../functions/api/preview.js';
 
 export default {
   async fetch(request, env) {
@@ -27,6 +28,10 @@ export default {
 
     if (pathname === '/api/create' && method === 'POST') {
       return createTasks({ request, env });
+    }
+
+    if (pathname === '/api/preview' && method === 'POST') {
+      return previewSubtasks({ request, env });
     }
 
     // Diagnostic: reports whether env vars resolved at runtime.
