@@ -200,7 +200,15 @@ textarea { resize: vertical; }
 
 /* ---------- buttons ---------- */
 
-.actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; flex-wrap: wrap; }
+.confirm-summary {
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: right;
+}
+.confirm-summary:empty { display: none; }
+
+.actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
 .actions .ghost { margin-right: auto; }
 
 button, .as-button {

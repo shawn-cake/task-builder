@@ -546,6 +546,21 @@ function renderPreview() {
   } else {
     setStatus(previewStatus, '');
   }
+
+  // Confirmation summary line above the actions bar
+  const confirmSummary = document.getElementById('confirm-summary');
+  if (confirmSummary) {
+    const p = state.preview;
+    const count = p.subtasks.length;
+    const noun = count === 1 ? 'subtask' : 'subtasks';
+    const projectName = p.projectMode === 'new'
+      ? `${p.newProject.name} (new project)`
+      : state.selectedProject.name;
+    const tasklistName = p.tasklistMode === 'new'
+      ? `${p.tasklistName} (new)`
+      : p.existingTasklistName;
+    confirmSummary.textContent = `${count} ${noun} → ${projectName} · ${tasklistName}`;
+  }
 }
 
 previewParentTask.addEventListener('input', () => {

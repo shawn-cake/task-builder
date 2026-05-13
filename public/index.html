@@ -102,11 +102,11 @@
         <fieldset>
           <legend>Client type</legend>
           <div class="radio-row">
-            <label><input type="radio" name="clientType" value="C" checked> <span>C</span></label>
-            <label><input type="radio" name="clientType" value="H"> <span>H</span></label>
-            <label><input type="radio" name="clientType" value="G"> <span>G</span></label>
+            <label><input type="radio" name="clientType" value="C" checked> <span>C — Contract</span></label>
+            <label><input type="radio" name="clientType" value="H"> <span>H — Hourly</span></label>
+            <label><input type="radio" name="clientType" value="G"> <span>G — Gratis</span></label>
           </div>
-          <p class="hint">Naming convention only — does not affect the subtasks.</p>
+          <p class="hint">Sets the prefix in the tasklist name above.</p>
         </fieldset>
 
         <div class="field">
@@ -138,7 +138,8 @@
 
         <div class="field">
           <label for="notes">Wording notes <span class="optional">(optional)</span></label>
-          <textarea id="notes" name="notes" rows="3" placeholder="Anything that should change about the subtask wording for this client."></textarea>
+          <textarea id="notes" name="notes" rows="3" placeholder="e.g. Skip the social step — they don't have social media. Use &quot;Dr. Kim&quot; not &quot;the practice&quot;."></textarea>
+          <p class="hint">AI applies these notes to the subtask wording on the next screen.</p>
         </div>
 
         </div><!-- end #standard-fields -->
@@ -187,9 +188,11 @@
 
       <div class="status" id="preview-status" aria-live="polite"></div>
 
+      <p class="confirm-summary" id="confirm-summary"></p>
+
       <div class="actions">
         <button type="button" class="ghost" id="back-to-form">← Back</button>
-        <button type="button" class="primary" id="confirm-create">Create in Teamwork</button>
+        <button type="button" class="primary" id="confirm-create">Confirm &amp; create</button>
       </div>
     </section>
 
@@ -203,7 +206,7 @@
       <div class="actions">
         <a id="success-project-link" class="primary as-button" target="_blank" rel="noopener" hidden>Open project in Teamwork ↗</a>
         <a id="success-link" class="primary as-button" target="_blank" rel="noopener">Open tasklist in Teamwork ↗</a>
-        <button type="button" class="ghost" id="start-over">Create another</button>
+        <button type="button" class="ghost" id="start-over">Build another</button>
       </div>
     </section>
   </main>
