@@ -32,7 +32,7 @@
         <label for="search">Search projects</label>
         <input type="search" id="search" placeholder="e.g. mandellbrown" autocomplete="off">
         <div class="status" id="search-status" aria-live="polite"></div>
-        <ul class="results" id="project-results"></ul>
+        <ul class="results" id="project-results" role="listbox" aria-label="Matching projects"></ul>
       </div>
 
       <div class="mode-panel" data-mode-panel="new" data-active="false">
@@ -106,7 +106,7 @@
             <label><input type="radio" name="clientType" value="H"> <span>H — Hourly</span></label>
             <label><input type="radio" name="clientType" value="G"> <span>G — Gratis</span></label>
           </div>
-          <p class="hint">Sets the prefix in the tasklist name above.</p>
+          <p class="hint">Appears in the tasklist name — see preview below.</p>
         </fieldset>
 
         <div class="field">

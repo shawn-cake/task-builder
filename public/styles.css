@@ -208,7 +208,8 @@ textarea { resize: vertical; }
 }
 .confirm-summary:empty { display: none; }
 
-.actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
+.actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; flex-wrap: wrap; }
+#screen-preview .actions { margin-top: 8px; }
 .actions .ghost { margin-right: auto; }
 
 button, .as-button {
