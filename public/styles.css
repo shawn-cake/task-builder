@@ -32,6 +32,38 @@ main {
 }
 
 header { margin-bottom: 32px; }
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.header-top h1 { margin: 0; }
+
+.step-indicator {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.step-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+  transition: background 180ms ease-out, transform 180ms ease-out;
+}
+.step-dot[data-state="active"] {
+  background: var(--accent);
+  transform: scale(1.3);
+}
+.step-dot[data-state="done"] {
+  background: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-dot { transition: none; }
+}
+
 h1 { margin: 0 0 4px; font-size: 28px; font-weight: 600; }
 h2 { margin: 0 0 8px; font-size: 22px; font-weight: 600; }
 h3 { margin: 24px 0 8px; font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
@@ -132,9 +164,16 @@ textarea { resize: vertical; }
   margin: 0;
 }
 
-.radio-stack { display: flex; flex-direction: column; gap: 8px; }
+.radio-stack { display: flex; flex-direction: column; gap: 6px; }
 .template-row { display: flex; gap: 8px; }
 .template-row .radio-card { flex: 1; }
+
+/* Template fieldset is the primary decision — more breathing room below */
+#template-fieldset { margin-bottom: 32px; }
+
+/* Tasklist mode cards are secondary configuration — compact */
+.radio-stack .radio-card { padding: 8px 12px; }
+.radio-stack .radio-card-title { font-size: 14px; }
 
 .ai-generate-panel-wrapper {
   margin-bottom: 20px;

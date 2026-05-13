@@ -9,7 +9,15 @@
 <body>
   <main>
     <header>
-      <h1>Task Builder</h1>
+      <div class="header-top">
+        <h1>Task Builder</h1>
+        <nav class="step-indicator" aria-label="Step progress">
+          <span class="step-dot" data-step="1"></span>
+          <span class="step-dot" data-step="2"></span>
+          <span class="step-dot" data-step="3"></span>
+          <span class="step-dot" data-step="4"></span>
+        </nav>
+      </div>
       <p class="subtitle" id="subtitle">Pick a project to start.</p>
     </header>
 
@@ -50,7 +58,7 @@
       <div class="selected-banner" id="selected-project-banner"></div>
 
       <form id="campaign-form">
-        <fieldset>
+        <fieldset id="template-fieldset">
           <legend>Template</legend>
           <div class="template-row">
             <label class="radio-card">

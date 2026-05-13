@@ -77,6 +77,14 @@ function showScreen(id) {
     'preview': 'Task Builder — Preview',
     'success': 'Task Builder — Done',
   };
+  const stepMap = { 'pick-project': 1, 'form': 2, 'preview': 3, 'success': 4 };
+  const currentStep = stepMap[id] ?? 1;
+  document.querySelectorAll('.step-dot').forEach((dot, i) => {
+    const step = i + 1;
+    if (step === currentStep) dot.dataset.state = 'active';
+    else if (step < currentStep) dot.dataset.state = 'done';
+    else delete dot.dataset.state;
+  });
   document.getElementById('subtitle').textContent = subtitleMap[id] ?? '';
   document.title = titleMap[id] ?? 'Task Builder';
 }
@@ -755,3 +763,5 @@ function setStatus(el, text, isError = false) {
 
 loadProjects('');
 updateTasklistPreview();
+// Initialize step indicator for the starting screen
+showScreen('pick-project');
