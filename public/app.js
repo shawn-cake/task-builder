@@ -65,14 +65,20 @@ function showScreen(id) {
   for (const el of document.querySelectorAll('.screen')) {
     el.dataset.active = el.id === `screen-${id}` ? 'true' : 'false';
   }
-  // Subtitle copy varies by step
-  const subtitle = document.getElementById('subtitle');
-  subtitle.textContent = {
+  const subtitleMap = {
     'pick-project': 'Pick a project to start.',
     'form': 'Fill in the campaign details.',
     'preview': 'Review and edit before pushing to Teamwork.',
     'success': '',
-  }[id] ?? '';
+  };
+  const titleMap = {
+    'pick-project': 'Task Builder — Pick Project',
+    'form': 'Task Builder — Configure',
+    'preview': 'Task Builder — Preview',
+    'success': 'Task Builder — Done',
+  };
+  document.getElementById('subtitle').textContent = subtitleMap[id] ?? '';
+  document.title = titleMap[id] ?? 'Task Builder';
 }
 
 // ===== screen 1: project picker (existing OR new) =====
@@ -99,6 +105,24 @@ function setProjectMode(mode) {
 
 for (const btn of modeToggleBtns) {
   btn.addEventListener('click', () => setProjectMode(btn.dataset.mode));
+  btn.addEventListener('keydown', (e) => {
+    const buttons = [...modeToggleBtns];
+    const i = buttons.indexOf(btn);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const next = buttons[(i + (e.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length];
+      next.focus();
+      setProjectMode(next.dataset.mode);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      buttons[0].focus();
+      setProjectMode(buttons[0].dataset.mode);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      buttons[buttons.length - 1].focus();
+      setProjectMode(buttons[buttons.length - 1].dataset.mode);
+    }
+  });
 }
 
 let debounceTimer = null;
@@ -137,10 +161,15 @@ function renderProjects(projects) {
   for (const p of projects) {
     const li = document.createElement('li');
     li.dataset.projectId = p.id;
+    li.tabIndex = 0;
+    li.setAttribute('role', 'option');
     li.innerHTML = '<span class="project-name"></span><span class="project-id"></span>';
     li.querySelector('.project-name').textContent = p.name;
     li.querySelector('.project-id').textContent = `#${p.id}`;
     li.addEventListener('click', () => selectProject(p));
+    li.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectProject(p); }
+    });
     projectResults.appendChild(li);
   }
 }
@@ -289,6 +318,15 @@ form.addEventListener('change', (e) => {
   if (e.target.name === 'tasklistMode') {
     const useExisting = e.target.value === 'existing';
     existingSelect.disabled = !useExisting || state.existingTasklists.length === 0;
+  }
+});
+
+// Clicking the nested select auto-selects its parent radio
+existingSelect.addEventListener('focus', () => {
+  const radio = form.querySelector('input[name="tasklistMode"][value="existing"]');
+  if (radio && !radio.checked) {
+    radio.checked = true;
+    radio.dispatchEvent(new Event('change', { bubbles: true }));
   }
 });
 
@@ -518,9 +556,6 @@ const regenerateStatus = document.getElementById('regenerate-status');
 function setRegeneratePanelOpen(open) {
   regeneratePanel.hidden = !open;
   toggleRegenerateBtn.setAttribute('aria-expanded', String(open));
-  toggleRegenerateBtn.textContent = open
-    ? 'Regenerate from description ▴'
-    : 'Regenerate from description ▾';
   if (open) {
     setStatus(regenerateStatus, '');
     regenerateDesc.focus();

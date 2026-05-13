@@ -113,7 +113,7 @@
               <input type="radio" name="tasklistMode" value="new" checked>
               <div>
                 <div class="radio-card-title">Create new tasklist</div>
-                <div class="radio-card-sub" id="preview-tasklist-name">SEO. C. May 2026 Email Campaign</div>
+                <div class="radio-card-sub"><span class="label-prefix">Preview:</span> <span id="preview-tasklist-name">SEO. C. May 2026 Email Campaign</span></div>
               </div>
             </label>
             <label class="radio-card" id="tasklist-existing-card">
@@ -136,7 +136,7 @@
         </div><!-- end #standard-fields -->
 
         <div class="actions">
-          <button type="button" class="ghost" id="back-to-projects">← Pick a different project</button>
+          <button type="button" class="ghost" id="back-to-projects">← Back</button>
           <button type="submit" class="primary">Preview tasks →</button>
         </div>
       </form>
@@ -154,9 +154,9 @@
       </div>
 
       <div class="subtasks-header">
-        <h3>Subtasks</h3>
+        <h2 class="section-label">Subtasks</h2>
         <button type="button" class="ghost small" id="toggle-regenerate" aria-expanded="false">
-          Regenerate from description ▾
+          Regenerate from description <span class="chevron" aria-hidden="true"></span>
         </button>
       </div>
 
