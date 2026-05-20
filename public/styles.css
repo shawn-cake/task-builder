@@ -167,6 +167,7 @@ textarea { resize: vertical; }
 .radio-stack { display: flex; flex-direction: column; gap: 6px; }
 .template-row { display: flex; gap: 8px; }
 .template-row .radio-card { flex: 1; }
+.template-sub-row { margin-top: 12px; padding: 10px 14px; background: var(--row-hover); border-radius: 8px; }
 
 /* Template fieldset is the primary decision — more breathing room below */
 #template-fieldset { margin-bottom: 32px; }
@@ -178,9 +179,10 @@ textarea { resize: vertical; }
 .ai-generate-panel-wrapper {
   margin-bottom: 20px;
 }
-#ai-generate-panel { margin-bottom: 20px; }
+#ai-generate-panel { margin-bottom: 8px; }
 #ai-generate-panel label { margin-bottom: 6px; }
 #ai-generate-panel textarea { margin-bottom: 4px; }
+#ai-generate-status { min-height: 0; }
 .radio-card {
   display: flex; align-items: flex-start; gap: 12px;
   padding: 12px 16px;
@@ -312,9 +314,24 @@ button.ghost:hover { color: var(--fg); }
   padding: 6px 8px;
   border-radius: 6px;
   font-size: 15px;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.4;
 }
 .inline-edit:hover { background: var(--row-hover); }
 .inline-edit:focus { background: white; border-color: var(--border-strong); }
+.inline-edit--desc {
+  font-size: 13px;
+  color: var(--muted);
+  padding-top: 2px;
+}
+.inline-edit--desc:focus { color: var(--fg); }
+.inline-stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.preview-row--top { align-items: flex-start; }
 
 .subtasks-header {
   display: flex;
@@ -390,7 +407,7 @@ button.ghost.small[aria-expanded="true"] {
 }
 .subtasks li {
   counter-increment: subtask;
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: flex-start; gap: 12px;
   padding: 4px 12px 4px 16px;
   border-bottom: 1px solid var(--border);
 }
@@ -399,6 +416,7 @@ button.ghost.small[aria-expanded="true"] {
   content: counter(subtask);
   width: 22px; height: 22px;
   flex-shrink: 0;
+  margin-top: 10px;
   background: var(--row-hover);
   border-radius: 50%;
   font-size: 12px;
@@ -407,16 +425,37 @@ button.ghost.small[aria-expanded="true"] {
   font-variant-numeric: tabular-nums;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.subtasks .subtask-input {
+.subtask-body {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.subtasks .subtask-input {
   border: 1px solid transparent;
   background: transparent;
   padding: 8px;
   border-radius: 6px;
   font-size: 15px;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.4;
 }
 .subtasks .subtask-input:hover { background: var(--row-hover); }
 .subtasks .subtask-input:focus { background: white; border-color: var(--border-strong); }
+.subtasks .subtask-desc {
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 2px 8px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  resize: none;
+  overflow: hidden;
+  line-height: 1.4;
+}
+.subtasks .subtask-desc:hover { background: var(--row-hover); }
+.subtasks .subtask-desc:focus { background: white; border-color: var(--border-strong); color: var(--fg); }
 .subtasks .remove {
   background: transparent;
   border: none;
@@ -424,8 +463,26 @@ button.ghost.small[aria-expanded="true"] {
   color: var(--muted);
   cursor: pointer;
   padding: 4px 8px;
+  margin-top: 4px;
+  flex-shrink: 0;
 }
 .subtasks .remove:hover { color: var(--error); }
+
+.drag-handle {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Ccircle cx='5' cy='4' r='1.2' fill='%23aaa'/%3E%3Ccircle cx='11' cy='4' r='1.2' fill='%23aaa'/%3E%3Ccircle cx='5' cy='8' r='1.2' fill='%23aaa'/%3E%3Ccircle cx='11' cy='8' r='1.2' fill='%23aaa'/%3E%3Ccircle cx='5' cy='12' r='1.2' fill='%23aaa'/%3E%3Ccircle cx='11' cy='12' r='1.2' fill='%23aaa'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+.subtasks li:hover .drag-handle { opacity: 1; }
+.drag-handle:active { cursor: grabbing; }
+.subtasks li.dragging { opacity: 0.35; }
+.subtasks li.drag-over { border-top: 2px solid var(--accent); }
 
 /* ---------- success ---------- */
 

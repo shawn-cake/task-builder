@@ -59,6 +59,7 @@ export async function onRequestPost({ request, env }) {
     parentTaskId = await tw.createTask(
       created.tasklistId,
       body.parentTaskName,
+      body.parentTaskDescription ?? '',
       body.tags ?? []
     );
     created.parentTaskId = parentTaskId;
@@ -70,9 +71,11 @@ export async function onRequestPost({ request, env }) {
   }
 
   // Step 3 — subtasks (sequential — the API rejects parallel writes from the same token)
-  for (const name of body.subtasks) {
+  for (const subtask of body.subtasks) {
+    const name = typeof subtask === 'string' ? subtask : subtask.name;
+    const description = typeof subtask === 'string' ? '' : (subtask.description ?? '');
     try {
-      const id = await tw.createSubtask(parentTaskId, name);
+      const id = await tw.createSubtask(parentTaskId, name, description);
       created.subtaskIds.push(id);
     } catch (e) {
       created.partial = true;
@@ -125,13 +128,15 @@ class TeamworkClient {
     };
   }
 
-  async createTask(tasklistId, name, tags) {
+  async createTask(tasklistId, name, description, tags) {
+    const task = { name };
+    if (description) task.description = description;
     const res = await fetch(
       `https://${this.domain}/projects/api/v3/tasklists/${tasklistId}/tasks.json`,
       {
         method: 'POST',
         headers: { Authorization: this.auth, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task: { name }, tags }),
+        body: JSON.stringify({ task, tags }),
       }
     );
     if (!res.ok) throw new Error(`task create ${res.status}: ${await res.text()}`);
@@ -139,13 +144,15 @@ class TeamworkClient {
     return data.task.id;
   }
 
-  async createSubtask(parentTaskId, name) {
+  async createSubtask(parentTaskId, name, description) {
+    const task = { name };
+    if (description) task.description = description;
     const res = await fetch(
       `https://${this.domain}/projects/api/v3/tasks/${parentTaskId}/subtasks.json`,
       {
         method: 'POST',
         headers: { Authorization: this.auth, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task: { name } }),
+        body: JSON.stringify({ task }),
       }
     );
     if (!res.ok) throw new Error(`subtask create ${res.status}: ${await res.text()}`);

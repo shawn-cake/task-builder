@@ -30,19 +30,28 @@ Rules:
 
 const SYSTEM_DESIGN = `You help internal project managers at a digital marketing agency create complete tasklists for any kind of campaign or project task. Your output is internal PM-facing operational text.
 
-Given a PM's description, you produce three things:
-1. tasklistName — a short name for the tasklist, following the agency pattern when appropriate:
-   - For recurring SEO/email/blog/social work: "SEO. C. [Month Year] [Task Type]" (use the client type if given, otherwise C)
-   - For one-off or non-SEO work: a clean 3-7 word descriptive name
+The input may be a PM's own description OR a raw client email. If it's a client email, extract the relevant task details and ignore signatures, pleasantries, and unrelated content.
+
+Given the input, produce three things:
+1. tasklistName — a short name for the tasklist:
+   - For recurring monthly content only (email campaigns, blog posts, social media): use the pattern "[Prefix. ][ClientType. ][Month Year] [Task Type]"
+     - Prefix: look at the first word of the project name. If it is a recognizable service category (e.g. SEO, PPC, Social, Email), use it as the prefix. Otherwise omit the prefix entirely.
+     - ClientType: use the client type code if provided (C, H, or G). Omit entirely if no client type is given.
+     - Example: project "SEO www.example.com", client type C → "SEO. C. May 2026 Email Campaign"
+     - Example: project "Kirby Plastic Surgery", no client type → "May 2026 Email Campaign"
+   - For everything else (website updates, product additions, design requests, one-off tasks, etc.): use a clean 3-7 word descriptive name with no date
 2. parentTaskName — the main task that will sit at the top of the tasklist. Can follow the same naming as the tasklist, or be more descriptive if that's clearer.
-3. subtasks — ordered list of 5-12 subtasks that capture the work end-to-end.
+3. subtasks — ordered list of subtasks that capture the work end-to-end.
 
 Rules for subtasks:
 - Each subtask is a single concrete action written as an imperative ("Send X", "Review Y", "Update Z").
 - Use "[Project manager]" prefix for client-facing or approval tasks.
 - Use "[Copywriter]" prefix for tasks that are specifically the copywriter's responsibility.
 - Don't include dates, assignees, or tags.
-- Don't pad — output as many subtasks as the work actually needs.`;
+- Don't pad — output as many subtasks as the work actually needs.
+- Dependency detection: if the input mentions that something is pending, coming soon, or will be provided later by the client (e.g. images, copy, assets, approvals), add a subtask near the top of the list that surfaces that dependency — written as an action for the team, e.g. "Receive product images from client" or "Wait for client to provide updated copy." Place it before any subtasks that depend on it.
+- URL inclusion: if the input contains URLs tied to specific items being worked on (e.g. a product page, a reference page), include the URL inline in the relevant subtask — e.g. "Review Age Reversal Neck Cream product page (https://...)" — so the team has quick access without hunting through the original email.
+- Descriptions: you may optionally add a short description to the parentTask and/or individual subtasks when there is meaningful context worth preserving — specific details, reference links, a pending dependency, or a nuance that won't fit cleanly in the task name. Omit the description entirely (empty string) when the name is self-explanatory. Never add a description just to restate the task name.`;
 
 const OUTPUT_SCHEMA = {
   type: 'object',
@@ -58,9 +67,21 @@ const DESIGN_OUTPUT_SCHEMA = {
   properties: {
     tasklistName: { type: 'string' },
     parentTaskName: { type: 'string' },
-    subtasks: { type: 'array', items: { type: 'string' } },
+    parentTaskDescription: { type: 'string' },
+    subtasks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          description: { type: 'string' },
+        },
+        required: ['name', 'description'],
+        additionalProperties: false,
+      },
+    },
   },
-  required: ['tasklistName', 'parentTaskName', 'subtasks'],
+  required: ['tasklistName', 'parentTaskName', 'parentTaskDescription', 'subtasks'],
   additionalProperties: false,
 };
 
@@ -168,10 +189,13 @@ ${body.description.trim()}`;
 }
 
 async function design(client, body) {
-  const userPrompt = `Project: ${body.projectName ?? '(unspecified)'}
-
-PM's description:
-${body.description.trim()}`;
+  const parts = [`Project: ${body.projectName ?? '(unspecified)'}`];
+  if (body.clientType) {
+    const typeLabel = { C: 'Contract', H: 'Hourly', G: 'Gratis' }[body.clientType] ?? body.clientType;
+    parts.push(`Client type: ${typeLabel} (${body.clientType})`);
+  }
+  parts.push('', "PM's description:", body.description.trim());
+  const userPrompt = parts.join('\n');
 
   const raw = await callAnthropic(client, SYSTEM_DESIGN, userPrompt, DESIGN_OUTPUT_SCHEMA);
   // callAnthropic returns parsed.subtasks for the subtasks schema, but for
@@ -207,7 +231,10 @@ async function callAnthropic(client, system, userPrompt, schema) {
     return {
       tasklistName: parsed.tasklistName.trim(),
       parentTaskName: parsed.parentTaskName.trim(),
-      subtasks: parsed.subtasks.map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean),
+      parentTaskDescription: (parsed.parentTaskDescription ?? '').trim(),
+      subtasks: parsed.subtasks
+        .filter((s) => s?.name?.trim())
+        .map((s) => ({ name: s.name.trim(), description: (s.description ?? '').trim() })),
     };
   }
 

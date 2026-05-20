@@ -6,6 +6,15 @@
 
 const TEMPLATES = [
   {
+    id: 'ai-generate',
+    name: 'AI Generate',
+    // Names and subtasks are produced by the AI — no patterns here.
+    tasklistNamePattern: null,
+    parentTaskNamePattern: null,
+    defaultTags: [],
+    subtasks: null,
+  },
+  {
     id: 'email-campaign',
     name: 'Email Campaign',
     tasklistNamePattern: 'SEO. {clientType}. {monthLabel} Email Campaign',
@@ -38,15 +47,6 @@ const TEMPLATES = [
       'Post the blog post to GMB.',
       'If this month\'s SEO content is a page update, run page through POP, update as needed, and notify Project & Content Manager',
     ],
-  },
-  {
-    id: 'ai-generate',
-    name: 'AI Generate',
-    // Names and subtasks are produced by the AI — no patterns here.
-    tasklistNamePattern: null,
-    parentTaskNamePattern: null,
-    defaultTags: [],
-    subtasks: null,
   },
 ];
 
@@ -271,7 +271,10 @@ async function loadExistingTasklists(projectId) {
 }
 
 function fillPattern(pattern, vars) {
-  return pattern.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
+  let result = pattern.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
+  // Collapse ". . " segments that result from an empty substitution (e.g. "SEO. . May" → "SEO. May")
+  result = result.replace(/\.\s+\./g, '.').trim();
+  return result;
 }
 
 function formatMonthLabel(monthValue) {
@@ -291,15 +294,21 @@ const standardFields = document.getElementById('standard-fields');
 const aiGeneratePanel = document.getElementById('ai-generate-panel');
 const aiGeneratePrompt = document.getElementById('ai-generate-prompt');
 const aiGenerateStatus = document.getElementById('ai-generate-status');
+const templatePicker = document.getElementById('template-picker');
 
 function setAiGenerateMode(isAi) {
   standardFields.hidden = isAi;
   aiGeneratePanel.hidden = !isAi;
-  // Update the submit button label to reflect the mode.
+  templatePicker.hidden = isAi;
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.textContent = isAi ? 'Generate preview →' : 'Preview tasks →';
-  // In AI mode, the tasklist name preview is n/a; clear it.
   if (isAi) tasklistNameSub.textContent = '(AI will generate)';
+  const hint = document.getElementById('client-type-hint');
+  if (hint) {
+    hint.textContent = isAi
+      ? 'Passed to the AI to help name the tasklist.'
+      : 'Appears in the tasklist name—see preview below.';
+  }
 }
 
 function updateTasklistPreview() {
@@ -308,11 +317,21 @@ function updateTasklistPreview() {
   tasklistNameSub.textContent = fillPattern(state.selectedTemplate.tasklistNamePattern, vars);
 }
 
-// Template selection
+// Task mode and template selection
 form.addEventListener('change', (e) => {
+  if (e.target.name === 'taskMode') {
+    const isAi = e.target.value === 'ai-generate';
+    if (isAi) {
+      state.selectedTemplate = TEMPLATES[0];
+    } else {
+      const checkedTemplate = form.querySelector('input[name="template"]:checked');
+      state.selectedTemplate = TEMPLATES.find((t) => t.id === (checkedTemplate?.value ?? 'email-campaign')) ?? TEMPLATES[1];
+    }
+    setAiGenerateMode(isAi);
+    updateTasklistPreview();
+  }
   if (e.target.name === 'template') {
-    state.selectedTemplate = TEMPLATES.find((t) => t.id === e.target.value) ?? TEMPLATES[0];
-    setAiGenerateMode(state.selectedTemplate.id === 'ai-generate');
+    state.selectedTemplate = TEMPLATES.find((t) => t.id === e.target.value) ?? TEMPLATES[1];
     updateTasklistPreview();
   }
 });
@@ -365,6 +384,7 @@ form.addEventListener('submit', async (e) => {
       aiGeneratePrompt.focus();
       return;
     }
+    const clientType = form.querySelector('input[name="clientType"]:checked')?.value ?? '';
     submitBtn.disabled = true;
     const originalLabel = submitBtn.textContent;
     submitBtn.textContent = 'Generating…';
@@ -377,6 +397,7 @@ form.addEventListener('submit', async (e) => {
           mode: 'design',
           description,
           projectName: state.selectedProject?.name ?? state.newProjectDraft?.name,
+          clientType,
         }),
       });
       const result = await res.json();
@@ -396,13 +417,14 @@ form.addEventListener('submit', async (e) => {
             ? state.existingTasklists.find((tl) => tl.id === Number(existingSelect.value))?.name
             : null,
         parentTaskName: result.parentTaskName,
-        subtasks: result.subtasks,
+        parentTaskDescription: result.parentTaskDescription ?? '',
+        subtasks: result.subtasks, // [{ name, description }]
         templateId: 'ai-generate',
         templateName: 'AI Generate',
         tags: [],
         notes: description,
         monthLabel: '',
-        clientType: '',
+        clientType,
         aiFallback: false,
       };
       renderPreview();
@@ -422,7 +444,7 @@ form.addEventListener('submit', async (e) => {
 
   // Run the AI tune pass only when the PM actually wrote notes. Empty notes
   // = no work for the model to do; skip the call and save the round-trip.
-  let subtasks = [...state.selectedTemplate.subtasks];
+  let subtasks = state.selectedTemplate.subtasks.map((name) => ({ name, description: '' }));
   let aiFallback = false;
   if (notes) {
     submitBtn.disabled = true;
@@ -434,7 +456,7 @@ form.addEventListener('submit', async (e) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'tune',
-          subtasks,
+          subtasks: subtasks.map((s) => s.name),
           notes,
           templateName: state.selectedTemplate.name,
           projectName: state.selectedProject?.name ?? state.newProjectDraft?.name,
@@ -444,7 +466,7 @@ form.addEventListener('submit', async (e) => {
       });
       const result = await res.json();
       if (res.ok && Array.isArray(result.subtasks) && result.subtasks.length > 0) {
-        subtasks = result.subtasks;
+        subtasks = result.subtasks.map((name) => ({ name, description: '' }));
         aiFallback = !!result.fallback;
       } else {
         aiFallback = true;
@@ -468,7 +490,8 @@ form.addEventListener('submit', async (e) => {
         ? state.existingTasklists.find((tl) => tl.id === Number(existingSelect.value))?.name
         : null,
     parentTaskName: fillPattern(state.selectedTemplate.parentTaskNamePattern, vars),
-    subtasks,
+    parentTaskDescription: '',
+    subtasks, // [{ name, description }]
     templateId: state.selectedTemplate.id,
     templateName: state.selectedTemplate.name,
     tags: state.selectedTemplate.defaultTags,
@@ -487,11 +510,21 @@ form.addEventListener('submit', async (e) => {
 const previewProject = document.getElementById('preview-project');
 const previewTasklist = document.getElementById('preview-tasklist');
 const previewParentTask = document.getElementById('preview-parent-task');
+const previewParentDesc = document.getElementById('preview-parent-desc');
 const previewSubtasks = document.getElementById('preview-subtasks');
 const previewStatus = document.getElementById('preview-status');
 const previewNewProjectRow = document.getElementById('preview-new-project-row');
 const previewNewProject = document.getElementById('preview-new-project');
 const confirmBtn = document.getElementById('confirm-create');
+
+let dragSrcIdx = null;
+
+function autoResize(el) {
+  requestAnimationFrame(() => {
+    el.style.height = '1px';
+    el.style.height = `${el.scrollHeight}px`;
+  });
+}
 
 function renderPreview() {
   const p = state.preview;
@@ -506,23 +539,53 @@ function renderPreview() {
     previewNewProjectRow.hidden = true;
     previewProject.textContent = `${state.selectedProject.name} #${state.selectedProject.id}`;
   }
-  previewTasklist.textContent =
-    p.tasklistMode === 'new'
-      ? `${p.tasklistName}  (new)`
-      : `${p.existingTasklistName}  (existing)`;
+  previewTasklist.value = p.tasklistMode === 'new' ? p.tasklistName : (p.existingTasklistName ?? '');
+  previewTasklist.disabled = p.tasklistMode !== 'new';
+  autoResize(previewTasklist);
   previewParentTask.value = p.parentTaskName;
+  autoResize(previewParentTask);
+  previewParentDesc.value = p.parentTaskDescription ?? '';
+  autoResize(previewParentDesc);
 
   previewSubtasks.innerHTML = '';
-  p.subtasks.forEach((text, idx) => {
+  p.subtasks.forEach((subtask, idx) => {
     const li = document.createElement('li');
-    const input = document.createElement('input');
-    input.type = 'text';
+    li.setAttribute('draggable', 'true');
+
+    const handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.setAttribute('aria-hidden', 'true');
+
+    const body = document.createElement('div');
+    body.className = 'subtask-body';
+
+    const input = document.createElement('textarea');
     input.className = 'subtask-input';
-    input.value = text;
+    input.value = subtask.name;
+    input.rows = 1;
     input.dataset.index = String(idx);
     input.addEventListener('input', () => {
-      state.preview.subtasks[Number(input.dataset.index)] = input.value;
+      state.preview.subtasks[Number(input.dataset.index)].name = input.value;
+      autoResize(input);
     });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
+    });
+
+    const desc = document.createElement('textarea');
+    desc.className = 'subtask-desc';
+    desc.value = subtask.description ?? '';
+    desc.rows = 1;
+    desc.placeholder = 'Add a note…';
+    desc.dataset.index = String(idx);
+    desc.addEventListener('input', () => {
+      state.preview.subtasks[Number(desc.dataset.index)].description = desc.value;
+      autoResize(desc);
+    });
+    desc.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
+    });
+
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'remove';
@@ -532,9 +595,45 @@ function renderPreview() {
       state.preview.subtasks.splice(Number(input.dataset.index), 1);
       renderPreview();
     });
-    li.appendChild(input);
+
+    li.addEventListener('dragstart', (e) => {
+      dragSrcIdx = idx;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => li.classList.add('dragging'), 0);
+    });
+    li.addEventListener('dragend', () => {
+      li.classList.remove('dragging');
+      previewSubtasks.querySelectorAll('li').forEach((el) => el.classList.remove('drag-over'));
+    });
+    li.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragSrcIdx !== idx) {
+        previewSubtasks.querySelectorAll('li').forEach((el) => el.classList.remove('drag-over'));
+        li.classList.add('drag-over');
+      }
+    });
+    li.addEventListener('dragleave', (e) => {
+      if (!li.contains(e.relatedTarget)) li.classList.remove('drag-over');
+    });
+    li.addEventListener('drop', (e) => {
+      e.preventDefault();
+      li.classList.remove('drag-over');
+      if (dragSrcIdx === null || dragSrcIdx === idx) return;
+      const [moved] = state.preview.subtasks.splice(dragSrcIdx, 1);
+      state.preview.subtasks.splice(idx, 0, moved);
+      dragSrcIdx = null;
+      renderPreview();
+    });
+
+    body.appendChild(input);
+    body.appendChild(desc);
+    li.appendChild(handle);
+    li.appendChild(body);
     li.appendChild(remove);
     previewSubtasks.appendChild(li);
+    autoResize(input);
+    autoResize(desc);
   });
 
   if (state.preview.aiFallback) {
@@ -565,6 +664,23 @@ function renderPreview() {
 
 previewParentTask.addEventListener('input', () => {
   state.preview.parentTaskName = previewParentTask.value;
+  autoResize(previewParentTask);
+});
+previewParentTask.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') e.preventDefault();
+});
+
+previewParentDesc.addEventListener('input', () => {
+  if (state.preview) state.preview.parentTaskDescription = previewParentDesc.value;
+  autoResize(previewParentDesc);
+});
+
+previewTasklist.addEventListener('input', () => {
+  if (state.preview) state.preview.tasklistName = previewTasklist.value;
+  autoResize(previewTasklist);
+});
+previewTasklist.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') e.preventDefault();
 });
 
 // ===== regenerate-from-description (AI generate mode) =====
@@ -619,7 +735,7 @@ regenerateSubmit.addEventListener('click', async () => {
       setStatus(regenerateStatus, `Error: ${result.error || res.statusText}`, true);
       return;
     }
-    state.preview.subtasks = result.subtasks;
+    state.preview.subtasks = result.subtasks.map((name) => ({ name, description: '' }));
     state.preview.aiFallback = false;
     renderPreview();
     setRegeneratePanelOpen(false);
@@ -638,8 +754,10 @@ document.getElementById('back-to-form').addEventListener('click', () => {
 
 confirmBtn.addEventListener('click', async () => {
   const p = state.preview;
-  // Trim empties and re-validate
-  p.subtasks = p.subtasks.map((s) => s.trim()).filter(Boolean);
+  // Trim and re-validate — subtask names required, descriptions optional
+  p.subtasks = p.subtasks
+    .map((s) => ({ name: s.name.trim(), description: (s.description ?? '').trim() }))
+    .filter((s) => s.name);
   if (p.subtasks.length === 0) {
     setStatus(previewStatus, 'Add at least one subtask before creating.', true);
     return;
@@ -684,6 +802,7 @@ confirmBtn.addEventListener('click', async () => {
   const payload = {
     tasklistMode: p.tasklistMode,
     parentTaskName: p.parentTaskName.trim(),
+    parentTaskDescription: (p.parentTaskDescription ?? '').trim(),
     subtasks: p.subtasks,
     tags: p.tags,
   };
@@ -759,7 +878,9 @@ document.getElementById('start-over').addEventListener('click', () => {
   state.selectedTemplate = TEMPLATES[0];
   aiGeneratePrompt.value = '';
   setStatus(aiGenerateStatus, '');
-  setAiGenerateMode(false);
+  setAiGenerateMode(true);
+  const taskModeRadio = form.querySelector('input[name="taskMode"][value="ai-generate"]');
+  if (taskModeRadio) taskModeRadio.checked = true;
   const firstTemplateRadio = form.querySelector('input[name="template"][value="email-campaign"]');
   if (firstTemplateRadio) firstTemplateRadio.checked = true;
   setProjectMode('existing');
@@ -778,5 +899,6 @@ function setStatus(el, text, isError = false) {
 
 loadProjects('');
 updateTasklistPreview();
+setAiGenerateMode(true);
 // Initialize step indicator for the starting screen
 showScreen('pick-project');

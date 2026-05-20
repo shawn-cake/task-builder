@@ -30,7 +30,7 @@
 
       <div class="mode-panel" data-mode-panel="existing" data-active="true">
         <label for="search">Search projects</label>
-        <input type="search" id="search" placeholder="e.g. mandellbrown" autocomplete="off">
+        <input type="search" id="search" placeholder="i.e. &#8220;inland&#8221;" autocomplete="off">
         <div class="status" id="search-status" aria-live="polite"></div>
         <ul class="results" id="project-results" role="listbox" aria-label="Matching projects"></ul>
       </div>
@@ -39,7 +39,7 @@
         <form id="new-project-form">
           <div class="field">
             <label for="new-project-name">Client name</label>
-            <input type="text" id="new-project-name" placeholder="e.g. Kirby Plastic Surgery" autocomplete="off" required>
+            <input type="text" id="new-project-name" placeholder="i.e. Kirby Plastic Surgery" autocomplete="off" required>
             <p class="hint">Used as the project name.</p>
           </div>
           <div class="field">
@@ -59,55 +59,56 @@
 
       <form id="campaign-form">
         <fieldset id="template-fieldset">
-          <legend>Template</legend>
+          <legend>Task type</legend>
           <div class="template-row">
             <label class="radio-card">
-              <input type="radio" name="template" value="email-campaign" checked>
-              <div>
-                <div class="radio-card-title">Email Campaign</div>
-                <div class="radio-card-sub">9 subtasks · Email tag</div>
-              </div>
-            </label>
-            <label class="radio-card">
-              <input type="radio" name="template" value="seo-blog-content">
-              <div>
-                <div class="radio-card-title">SEO Blog Content</div>
-                <div class="radio-card-sub">7 subtasks · Copywriting tag</div>
-              </div>
-            </label>
-            <label class="radio-card">
-              <input type="radio" name="template" value="ai-generate">
+              <input type="radio" name="taskMode" value="ai-generate" checked>
               <div>
                 <div class="radio-card-title">AI Generate</div>
                 <div class="radio-card-sub">Describe your task</div>
               </div>
             </label>
+            <label class="radio-card">
+              <input type="radio" name="taskMode" value="template">
+              <div>
+                <div class="radio-card-title">Use a template</div>
+                <div class="radio-card-sub">Email Campaign, SEO Blog</div>
+              </div>
+            </label>
+          </div>
+          <div id="template-picker" hidden>
+            <div class="radio-row template-sub-row">
+              <label><input type="radio" name="template" value="email-campaign" checked> <span>Email Campaign</span></label>
+              <label><input type="radio" name="template" value="seo-blog-content"> <span>SEO Blog Content</span></label>
+            </div>
           </div>
         </fieldset>
 
-        <!-- AI Generate prompt — shown only when AI Generate template is selected -->
+        <!-- AI Generate prompt — shown only when AI Generate is selected -->
         <div id="ai-generate-panel" hidden>
-          <label for="ai-generate-prompt">Describe the campaign or task</label>
+          <label for="ai-generate-prompt">Describe the task, or paste notes directly from its source</label>
           <textarea
             id="ai-generate-prompt"
-            rows="4"
-            placeholder="e.g. Monthly email for a dermatology client — they don't use social media. Include review steps."
+            rows="6"
+            placeholder="Paste a meeting agenda's action items, a client's email, etc. Or, describe the task in your own words."
           ></textarea>
           <div class="status" id="ai-generate-status" aria-live="polite"></div>
         </div>
 
-        <!-- Standard fields — hidden when AI Generate is selected -->
-        <div id="standard-fields">
-
+        <!-- Client type — shown for all task types -->
         <fieldset>
           <legend>Client type</legend>
           <div class="radio-row">
             <label><input type="radio" name="clientType" value="C" checked> <span>Contract</span></label>
             <label><input type="radio" name="clientType" value="H"> <span>Hourly</span></label>
             <label><input type="radio" name="clientType" value="G"> <span>Gratis</span></label>
+            <label><input type="radio" name="clientType" value=""> <span>None</span></label>
           </div>
-          <p class="hint">Appears in the tasklist name—see preview below.</p>
+          <p class="hint" id="client-type-hint">Appears in the tasklist name—see preview below.</p>
         </fieldset>
+
+        <!-- Standard fields — hidden when AI Generate is selected -->
+        <div id="standard-fields">
 
         <div class="field">
           <label for="month">Month</label>
@@ -158,8 +159,8 @@
           <span class="preview-label">New project</span><span id="preview-new-project"></span>
         </div>
         <div class="preview-row"><span class="preview-label">Project</span><span id="preview-project"></span></div>
-        <div class="preview-row"><span class="preview-label">Tasklist</span><span id="preview-tasklist"></span></div>
-        <div class="preview-row"><span class="preview-label">Parent task</span><input type="text" id="preview-parent-task" class="inline-edit"></div>
+        <div class="preview-row"><span class="preview-label">Tasklist</span><textarea id="preview-tasklist" class="inline-edit" rows="1"></textarea></div>
+        <div class="preview-row preview-row--top"><span class="preview-label">Parent task</span><div class="inline-stack"><textarea id="preview-parent-task" class="inline-edit" rows="1"></textarea><textarea id="preview-parent-desc" class="inline-edit inline-edit--desc" rows="1" placeholder="Add a description…"></textarea></div></div>
       </div>
 
       <div class="subtasks-header">
@@ -183,7 +184,7 @@
         <div class="status" id="regenerate-status" aria-live="polite"></div>
       </div>
 
-      <p class="hint" id="subtasks-hint">Click any subtask to edit. Deleting all text removes it.</p>
+      <p class="hint" id="subtasks-hint">Click to edit · drag to reorder · clear to remove.</p>
       <ol class="subtasks" id="preview-subtasks"></ol>
 
       <div class="status" id="preview-status" aria-live="polite"></div>
