@@ -68,7 +68,7 @@ function showScreen(id) {
   const subtitleMap = {
     'pick-project': 'Pick a project to start.',
     'form': 'Fill in the campaign details.',
-    'preview': 'Review and edit before pushing to Teamwork.',
+    'preview': 'Review and edit before creating tasks.',
     'success': '',
   };
   const titleMap = {
@@ -224,7 +224,7 @@ newProjectForm.addEventListener('submit', (e) => {
     name,
     description: newProjectDescInput.value.trim(),
   };
-  // The project doesn't exist in Teamwork yet — show its draft name as
+  // The project doesn't exist yet — show its draft name as
   // the selected project. Final id is assigned at confirm time.
   state.selectedProject = { id: null, name };
   state.existingTasklists = [];
@@ -651,7 +651,7 @@ confirmBtn.addEventListener('click', async () => {
 
   confirmBtn.disabled = true;
 
-  // Step A — create the Teamwork project, if this is "new project" mode.
+  // Step A — create the project, if this is "new project" mode.
   // Done as a separate request so the existing /api/create flow stays
   // untouched. If project creation fails, nothing downstream happens.
   let createdProject = null;

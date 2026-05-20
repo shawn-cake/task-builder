@@ -1,14 +1,14 @@
 # Task Builder
 
-Internal tool for generating structured Teamwork tasklists, parent tasks, and subtasks from a curated template library. AI handles wording customization; the tool pushes to the Teamwork API after a PM previews and confirms.
+Internal tool for generating structured tasklists, parent tasks, and subtasks from a curated template library. AI handles wording customization; the tool pushes to the task management API after a PM previews and confirms.
 
 ## Stack
 
 - **Frontend:** plain HTML/CSS/JS, no build step
 - **Backend:** Cloudflare Pages Functions (serverless, runs on Workers runtime)
 - **AI:** Anthropic API (Claude) for wording customization
-- **Tasks:** Teamwork REST API (v3 for reads + task/subtask creates, v1 for tasklist creates)
-- **Hosting:** Cloudflare Pages, one deployed URL for the whole team
+- **Tasks:** Teamwork REST API (v3 for reads + task/subtask creates, v1 for tasklist/project creates)
+- **Hosting:** Cloudflare Workers, one deployed URL for the whole team
 
 ## Project layout
 
@@ -42,7 +42,7 @@ Wrangler serves the `public/` directory and runs `functions/` as serverless endp
 
 ## Secrets and config
 
-Sensitive credentials are server-side only and **never appear in committed code, frontend JS, or browser network requests**. Non-sensitive config (just the Teamwork domain) lives in `wrangler.jsonc` so `wrangler deploy` doesn't wipe it between releases.
+Sensitive credentials are server-side only and **never appear in committed code, frontend JS, or browser network requests**. Non-sensitive config (the task API domain) lives in `wrangler.jsonc` so `wrangler deploy` doesn't wipe it between releases.
 
 | Name | Where it lives in prod | Why |
 |---|---|---|
@@ -56,8 +56,8 @@ Sensitive credentials are server-side only and **never appear in committed code,
 
 ## Deployment
 
-Cloudflare Pages auto-deploys from this GitHub repo's `main` branch. First-time setup happens once in the Cloudflare dashboard:
+Cloudflare Workers auto-deploys from this GitHub repo's `main` branch. First-time setup happens once in the Cloudflare dashboard:
 
-1. Create a Pages project, connect this repo, set build output directory to `public`.
-2. Add the three environment variables above under Settings → Environment variables.
+1. Create a Workers project, connect this repo, set build command to `npx wrangler deploy`.
+2. Add the three environment variables above under Settings → Variables and Secrets.
 3. Future pushes to `main` deploy automatically.

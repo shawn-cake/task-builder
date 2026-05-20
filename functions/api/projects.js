@@ -1,8 +1,8 @@
 // GET /api/projects?search=<term>
-// Returns active Teamwork projects, optionally filtered by name.
+// Returns active projects, optionally filtered by name.
 //
 // POST /api/projects
-// Creates a brand-new Teamwork project from { name, description? }.
+// Creates a brand-new project from { name, description? }.
 // Used by the "one project per client, SOW tracked via tags" mode.
 // Secrets stay on the server — the browser never sees TEAMWORK_API_TOKEN.
 
@@ -30,7 +30,7 @@ export async function onRequestGet({ request, env }) {
 
   if (!res.ok) {
     return Response.json(
-      { error: 'Teamwork API error', upstreamStatus: res.status },
+      { error: 'API error', upstreamStatus: res.status },
       { status: res.status === 401 ? 502 : res.status }
     );
   }
@@ -69,7 +69,7 @@ export async function onRequestPost({ request, env }) {
   const description =
     typeof body?.description === 'string' ? body.description.trim() : '';
 
-  // v1 endpoint — Teamwork does not expose project create on v3.
+  // v1 endpoint — project create is not available on v3.
   // Same kebab/v1 pattern as tasklist creation.
   const auth = btoa(`${TEAMWORK_API_TOKEN}:x`);
   const payload = { project: { name } };
@@ -87,7 +87,7 @@ export async function onRequestPost({ request, env }) {
   if (!res.ok) {
     const text = await res.text();
     return Response.json(
-      { error: `Teamwork project create failed (${res.status}): ${text}` },
+      { error: `Project create failed (${res.status}): ${text}` },
       { status: res.status === 401 ? 502 : 502 }
     );
   }

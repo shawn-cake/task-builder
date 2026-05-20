@@ -1,14 +1,13 @@
 // POST /api/create
-// Orchestrates the full Teamwork creation:
+// Orchestrates task creation:
 //   1. If `tasklistMode === "new"`: create the tasklist (v1 endpoint).
 //      Otherwise reuse the supplied existing `tasklistId`.
 //   2. Create the parent task in that tasklist (v3 endpoint).
 //   3. Create one subtask per item in the `subtasks` array (v3 endpoint).
 //
 // Returns the IDs/URLs of what was created. If a subtask write fails
-// mid-flight we still report what got through; Teamwork has no
-// transactional API and silent partial-success would be worse than
-// surfacing the truth.
+// mid-flight we still report what got through — there is no transactional
+// API and silent partial-success would be worse than surfacing the truth.
 //
 // Request body shape:
 // {
@@ -70,7 +69,7 @@ export async function onRequestPost({ request, env }) {
     );
   }
 
-  // Step 3 — subtasks (sequential — Teamwork doesn't love parallel writes from the same token)
+  // Step 3 — subtasks (sequential — the API rejects parallel writes from the same token)
   for (const name of body.subtasks) {
     try {
       const id = await tw.createSubtask(parentTaskId, name);
