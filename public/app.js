@@ -76,7 +76,7 @@ function showScreen(id) {
     loadProjects(term);
   }
   const subtitleMap = {
-    'form': 'Describe your task to get started.',
+    'form': '',
     'pick-project': 'Pick a project to assign tasks to.',
     'preview': 'Review and edit before creating tasks.',
     'success': '',

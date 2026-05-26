@@ -4,6 +4,45 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Task Builder</title>
+
+  <!-- Satoshi — geometric humanist sans (Fontshare) -->
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,400,300&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      corePlugins: {
+        preflight: false,   // our styles.css owns all base resets
+      },
+      theme: {
+        fontFamily: {
+          sans: ['Satoshi', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        },
+        extend: {
+          colors: {
+            // Cake brand
+            'cake-blue-dark':   '#22568A',
+            'cake-blue':        '#3087E0',
+            'cake-blue-soft':   '#E3F1FF',
+            'cake-yellow':      '#FFD176',
+            'cake-yellow-soft': '#FFF7E5',
+            'cake-ink':         '#40404B',
+            // App surface tokens — matches CSS custom properties
+            'app-bg':           '#F3F5F8',
+            'app-surface':      '#FFFFFF',
+            'app-muted':        '#697586',
+            'app-border':       '#DDE1E7',
+            'app-border-strong':'#B8C4D0',
+            'app-hover':        '#EEF1F5',
+          },
+        },
+      },
+    }
+  </script>
+
+  <!-- Component styles — loaded after Tailwind so our classes take precedence -->
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -18,7 +57,7 @@
           <span class="step-dot" data-step="4"></span>
         </nav>
       </div>
-      <p class="subtitle" id="subtitle">Pick a project to start.</p>
+      <p class="subtitle" id="subtitle"></p>
     </header>
 
     <!-- Screen 1: configure -->
