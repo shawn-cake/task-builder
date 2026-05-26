@@ -34,12 +34,12 @@ The input may be a PM's own description OR a raw client email. If it's a client 
 
 Given the input, produce three things:
 1. tasklistName — a short name for the tasklist:
-   - For recurring monthly content only (email campaigns, blog posts, social media): use the pattern "[Prefix. ][ClientType. ][Month Year] [Task Type]"
+   - If a contract type code is provided (C, H, or G), it MUST appear in the tasklist name as "[ClientType. ]" — always, for every task type.
+   - For recurring monthly content (email campaigns, blog posts, social media): use the pattern "[Prefix. ][ClientType. ][Month Year] [Task Type]"
      - Prefix: look at the first word of the project name. If it is a recognizable service category (e.g. SEO, PPC, Social, Email), use it as the prefix. Otherwise omit the prefix entirely.
-     - ClientType: use the client type code if provided (C, H, or G). Omit entirely if no client type is given.
-     - Example: project "SEO www.example.com", client type C → "SEO. C. May 2026 Email Campaign"
-     - Example: project "Kirby Plastic Surgery", no client type → "May 2026 Email Campaign"
-   - For everything else (website updates, product additions, design requests, one-off tasks, etc.): use a clean 3-7 word descriptive name with no date
+     - Example: project "SEO www.example.com", contract type C → "SEO. C. May 2026 Email Campaign"
+     - Example: project "Kirby Plastic Surgery", no contract type → "May 2026 Email Campaign"
+   - For everything else (website updates, product additions, design requests, one-off tasks, etc.): use a clean 3-7 word descriptive name with no date. Contract type still appears: e.g. contract type H → "H. New Product Page Build"
 2. parentTaskName — the main task that will sit at the top of the tasklist. Can follow the same naming as the tasklist, or be more descriptive if that's clearer.
 3. subtasks — ordered list of subtasks that capture the work end-to-end.
 
@@ -162,7 +162,7 @@ function validate(body) {
 function buildContext(body) {
   const parts = [`Client / project: ${body.projectName ?? '(unspecified)'}`];
   if (body.monthLabel) parts.push(`Month: ${body.monthLabel}`);
-  if (body.clientType) parts.push(`Client type: ${body.clientType}`);
+  if (body.clientType) parts.push(`Contract type: ${body.clientType}`);
   if (body.templateName) parts.unshift(`Template: ${body.templateName}`);
   return parts.join('\n');
 }
@@ -192,14 +192,31 @@ async function design(client, body) {
   const parts = [`Project: ${body.projectName ?? '(unspecified)'}`];
   if (body.clientType) {
     const typeLabel = { C: 'Contract', H: 'Hourly', G: 'Gratis' }[body.clientType] ?? body.clientType;
-    parts.push(`Client type: ${typeLabel} (${body.clientType})`);
+    parts.push(`Contract type: ${typeLabel} (${body.clientType})`);
+  }
+  if (Array.isArray(body.existingTasklists) && body.existingTasklists.length > 0) {
+    parts.push('', 'Existing tasklists in this project (derive naming convention from these; avoid exact duplicates):');
+    for (const name of body.existingTasklists) parts.push(`- ${name}`);
   }
   parts.push('', "PM's description:", body.description.trim());
   const userPrompt = parts.join('\n');
 
   const raw = await callAnthropic(client, SYSTEM_DESIGN, userPrompt, DESIGN_OUTPUT_SCHEMA);
-  // callAnthropic returns parsed.subtasks for the subtasks schema, but for
-  // DESIGN_OUTPUT_SCHEMA we get the full object back via a separate path.
+
+  // Safety net: ensure the contract type code is present in the tasklist name.
+  // The model should include it per the system prompt, but post-process just in case.
+  if (body.clientType) {
+    const ct = body.clientType;
+    if (!raw.tasklistName.includes(`${ct}. `)) {
+      // Insert after a leading service-category prefix (e.g. "SEO. ") if present,
+      // otherwise prepend directly.
+      const prefixMatch = raw.tasklistName.match(/^([A-Z]{2,6}\. )/);
+      raw.tasklistName = prefixMatch
+        ? `${prefixMatch[0]}${ct}. ${raw.tasklistName.slice(prefixMatch[0].length)}`
+        : `${ct}. ${raw.tasklistName}`;
+    }
+  }
+
   return raw;
 }
 

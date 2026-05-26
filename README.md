@@ -1,5 +1,7 @@
 # Task Builder
 
+> **Internal prototype** — built for Cake's internal team only. Not intended for external use or distribution.
+
 Internal tool for generating structured tasklists, parent tasks, and subtasks from a curated template library. AI handles wording customization; the tool pushes to the task management API after a PM previews and confirms.
 
 ## Stack

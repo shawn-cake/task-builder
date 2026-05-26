@@ -1,5 +1,6 @@
 :root {
   --bg: #fafaf7;
+  --surface: #ffffff;
   --fg: #1a1a1a;
   --muted: #6b6b6b;
   --border: #e3e3df;
@@ -14,6 +15,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html { scrollbar-gutter: stable; }
 
@@ -321,9 +323,12 @@ button.ghost:hover { color: var(--fg); }
 .inline-edit:hover { background: var(--row-hover); }
 .inline-edit:focus { background: white; border-color: var(--border-strong); }
 .inline-edit--desc {
+  flex: none;          /* don't let flex-basis:0 fight autoResize's inline height */
   font-size: 13px;
   color: var(--muted);
   padding-top: 2px;
+  max-height: 100px;  /* ~5 lines, then scrolls */
+  overflow-y: auto;
 }
 .inline-edit--desc:focus { color: var(--fg); }
 .inline-stack {
@@ -332,6 +337,18 @@ button.ghost:hover { color: var(--fg); }
   flex-direction: column;
 }
 .preview-row--top { align-items: flex-start; }
+.preview-assignee-select {
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 15px;
+  width: auto;
+  cursor: pointer;
+}
+.preview-assignee-select:hover { background: var(--row-hover); border-color: transparent; }
+.preview-assignee-select:focus { background: white; border-color: var(--border-strong); box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15); }
 
 .subtasks-header {
   display: flex;
@@ -451,11 +468,25 @@ button.ghost.small[aria-expanded="true"] {
   font-size: 13px;
   color: var(--muted);
   resize: none;
-  overflow: hidden;
+  overflow-y: auto;
   line-height: 1.4;
+  max-height: 100px;  /* ~5 lines, then scrolls */
 }
 .subtasks .subtask-desc:hover { background: var(--row-hover); }
 .subtasks .subtask-desc:focus { background: white; border-color: var(--border-strong); color: var(--fg); }
+.subtasks .subtask-assignee {
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 2px 8px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  width: auto;
+  align-self: flex-start;
+  cursor: pointer;
+}
+.subtasks .subtask-assignee:hover { background: var(--row-hover); border-color: transparent; }
+.subtasks .subtask-assignee:focus { background: white; border-color: var(--border-strong); color: var(--fg); }
 .subtasks .remove {
   background: transparent;
   border: none;
@@ -506,3 +537,240 @@ button.ghost.small[aria-expanded="true"] {
   margin: 16px 0;
 }
 .warning:empty { display: none; }
+
+/* ---------- assignee field ---------- */
+
+#assignee-field { margin-bottom: 20px; }
+#assignee-field select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--fg);
+  margin-top: 6px;
+}
+#assignee-field select:disabled { opacity: 0.5; }
+
+/* ---------- batch items (form screen) ---------- */
+
+#batch-panel { display: flex; flex-direction: column; gap: 12px; }
+#batch-items {
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.batch-item {
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.batch-item:last-child { border-bottom: none; }
+.batch-item-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -4px; /* tighten gap between header and textarea */
+}
+.batch-item-remove {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.batch-item-remove:hover { color: var(--error); }
+.batch-item-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  background: var(--surface);
+  color: var(--fg);
+  box-sizing: border-box;
+}
+.batch-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.batch-item-client-type {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.batch-item-client-type label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.batch-item-assignee select {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--fg);
+}
+.batch-item-assignee select:disabled { opacity: 0.5; }
+
+/* ---------- batch preview cards ---------- */
+
+#batch-preview-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.batch-preview-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* overflow must be visible so the project-search dropdown can escape */
+  overflow: visible;
+}
+/* overflow:visible is set on the card so border-radius no longer clips children.
+   Children must manage their own corners. */
+.batch-preview-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  /* Top corners always rounded */
+  border-radius: 8px 8px 0 0;
+}
+/* When body is hidden the header IS the full card — round all corners */
+.batch-preview-card:has(.batch-preview-card-body[hidden]) .batch-preview-card-header {
+  border-radius: 8px;
+  border-bottom: none;
+}
+.batch-card-toggle {
+  font-size: 12px;
+  padding: 2px 6px;
+  min-width: 24px;
+}
+.batch-card-toggle[aria-expanded="true"]::before { content: '▼'; }
+.batch-card-toggle[aria-expanded="false"]::before { content: '▶'; }
+.batch-card-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.batch-card-remove {
+  font-size: 13px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.batch-card-remove:hover { color: var(--error); }
+.batch-preview-card-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  border-radius: 0 0 8px 8px;
+}
+
+/* Per-card project picker */
+.batch-card-project-row {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: 2px;
+}
+.batch-card-project-picker {
+  flex: 1;
+  min-width: 0;
+}
+.batch-card-project-selected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.batch-card-project-selected .project-name {
+  font-weight: 500;
+  font-size: 14px;
+}
+.batch-card-project-search {
+  position: relative; /* anchor for the absolute dropdown */
+}
+.batch-card-project-search-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--fg);
+  box-sizing: border-box;
+}
+/* Status sits below the input but only takes space when non-empty */
+.batch-card-project-search .status:empty { display: none; }
+.batch-card-project-search .status {
+  font-size: 12px;
+  padding: 2px 0;
+}
+/* Dropdown overlays the card — doesn't push content down */
+.batch-card-project-results {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.10);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  z-index: 50;
+}
+.batch-card-project-results:empty { display: none; }
+.batch-card-project-results li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  gap: 8px;
+}
+.batch-card-project-results li:hover,
+.batch-card-project-results li:focus {
+  background: var(--row-hover);
+  outline: none;
+}
+.batch-card-project-results li + li {
+  border-top: 1px solid var(--border);
+}
+
+/* project-selected-panel on pick-project screen */
+#project-selected-panel {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

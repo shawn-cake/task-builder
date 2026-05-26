@@ -21,8 +21,11 @@
       <p class="subtitle" id="subtitle">Pick a project to start.</p>
     </header>
 
-    <!-- Screen 1: pick project -->
-    <section class="screen" id="screen-pick-project" data-active="true">
+    <!-- Screen 1: configure -->
+    <!-- (project picker is screen 2 — see below) -->
+
+    <!-- Screen 2: pick project -->
+    <section class="screen" id="screen-pick-project">
       <div class="mode-toggle" role="tablist" aria-label="Project mode">
         <button type="button" class="mode-toggle-btn" role="tab" data-mode="existing" aria-selected="true">Add to existing project</button>
         <button type="button" class="mode-toggle-btn" role="tab" data-mode="new" aria-selected="false">Create new project</button>
@@ -47,16 +50,54 @@
             <textarea id="new-project-description" rows="3" placeholder="Short description shown in Teamwork."></textarea>
           </div>
           <div class="actions">
-            <button type="submit" class="primary">Continue →</button>
+            <button type="submit" class="primary">Set project →</button>
           </div>
         </form>
       </div>
+
+      <!-- Shown after a project is selected / set -->
+      <div id="project-selected-panel" hidden>
+        <div class="selected-banner" id="selected-project-banner"></div>
+
+        <fieldset id="tasklist-fieldset" hidden>
+          <legend>Tasklist</legend>
+          <div class="radio-stack">
+            <label class="radio-card">
+              <input type="radio" name="tasklistMode" value="new" checked>
+              <div>
+                <div class="radio-card-title">Create new tasklist</div>
+                <div class="radio-card-sub"><span class="label-prefix">Preview:</span> <span id="preview-tasklist-name">SEO. C. May 2026 Email Campaign</span></div>
+              </div>
+            </label>
+            <label class="radio-card" id="tasklist-existing-card">
+              <input type="radio" name="tasklistMode" value="existing">
+              <div>
+                <div class="radio-card-title">Add to existing tasklist</div>
+                <select id="existing-tasklist" disabled>
+                  <option value="">Loading…</option>
+                </select>
+              </div>
+            </label>
+          </div>
+        </fieldset>
+
+        <div id="assignee-field" hidden>
+          <label for="assignee-select">Assignee <span class="optional">(optional)</span></label>
+          <select id="assignee-select">
+            <option value="">— Unassigned —</option>
+          </select>
+          <p class="hint" id="assignee-hint"></p>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="ghost" id="back-to-configure">← Back</button>
+          <button type="button" class="primary" id="continue-to-preview">Continue →</button>
+        </div>
+      </div>
     </section>
 
-    <!-- Screen 2: form -->
-    <section class="screen" id="screen-form">
-      <div class="selected-banner" id="selected-project-banner"></div>
-
+    <!-- Screen 1: configure -->
+    <section class="screen" id="screen-form" data-active="true">
       <form id="campaign-form">
         <fieldset id="template-fieldset">
           <legend>Task type</legend>
@@ -95,9 +136,16 @@
           <div class="status" id="ai-generate-status" aria-live="polite"></div>
         </div>
 
-        <!-- Client type — shown for all task types -->
+        <!-- Batch mode — shown only when Batch is selected -->
+        <div id="batch-panel" hidden>
+          <div id="batch-items"></div>
+          <button type="button" class="ghost small" id="batch-add-item">+ Add another</button>
+          <div class="status" id="batch-status" aria-live="polite"></div>
+        </div>
+
+        <!-- Contract type — shown for all task types -->
         <fieldset>
-          <legend>Client type</legend>
+          <legend>Contract type</legend>
           <div class="radio-row">
             <label><input type="radio" name="clientType" value="C" checked> <span>Contract</span></label>
             <label><input type="radio" name="clientType" value="H"> <span>Hourly</span></label>
@@ -115,28 +163,6 @@
           <input type="month" id="month" name="month" required>
         </div>
 
-        <fieldset id="tasklist-fieldset">
-          <legend>Tasklist</legend>
-          <div class="radio-stack">
-            <label class="radio-card">
-              <input type="radio" name="tasklistMode" value="new" checked>
-              <div>
-                <div class="radio-card-title">Create new tasklist</div>
-                <div class="radio-card-sub"><span class="label-prefix">Preview:</span> <span id="preview-tasklist-name">SEO. C. May 2026 Email Campaign</span></div>
-              </div>
-            </label>
-            <label class="radio-card" id="tasklist-existing-card">
-              <input type="radio" name="tasklistMode" value="existing">
-              <div>
-                <div class="radio-card-title">Add to existing tasklist</div>
-                <select id="existing-tasklist" disabled>
-                  <option value="">Loading…</option>
-                </select>
-              </div>
-            </label>
-          </div>
-        </fieldset>
-
         <div class="field">
           <label for="notes">Wording notes <span class="optional">(optional)</span></label>
           <textarea id="notes" name="notes" rows="3" placeholder="e.g. Skip the social step — they don't have social media. Use &quot;Dr. Kim&quot; not &quot;the practice&quot;."></textarea>
@@ -146,8 +172,7 @@
         </div><!-- end #standard-fields -->
 
         <div class="actions">
-          <button type="button" class="ghost" id="back-to-projects">← Back</button>
-          <button type="submit" class="primary">Preview tasks →</button>
+          <button type="submit" class="primary">Next →</button>
         </div>
       </form>
     </section>
@@ -160,7 +185,11 @@
         </div>
         <div class="preview-row"><span class="preview-label">Project</span><span id="preview-project"></span></div>
         <div class="preview-row"><span class="preview-label">Tasklist</span><textarea id="preview-tasklist" class="inline-edit" rows="1"></textarea></div>
-        <div class="preview-row preview-row--top"><span class="preview-label">Parent task</span><div class="inline-stack"><textarea id="preview-parent-task" class="inline-edit" rows="1"></textarea><textarea id="preview-parent-desc" class="inline-edit inline-edit--desc" rows="1" placeholder="Add a description…"></textarea></div></div>
+        <div class="preview-row preview-row--top"><span class="preview-label">Parent task</span><div class="inline-stack"><textarea id="preview-parent-task" class="inline-edit" rows="1"></textarea><textarea id="preview-parent-desc" class="inline-edit inline-edit--desc" rows="1" placeholder="Description…"></textarea></div></div>
+        <div class="preview-row" id="preview-assignee-row" hidden>
+          <span class="preview-label">Assignee</span>
+          <select id="preview-assignee-select" class="preview-assignee-select"></select>
+        </div>
       </div>
 
       <div class="subtasks-header">
@@ -186,6 +215,9 @@
 
       <p class="hint" id="subtasks-hint">Click to edit · drag to reorder · clear to remove.</p>
       <ol class="subtasks" id="preview-subtasks"></ol>
+
+      <!-- Batch mode preview — hidden in single-task mode -->
+      <div id="batch-preview-cards" hidden></div>
 
       <div class="status" id="preview-status" aria-live="polite"></div>
 

@@ -60,7 +60,8 @@ export async function onRequestPost({ request, env }) {
       created.tasklistId,
       body.parentTaskName,
       body.parentTaskDescription ?? '',
-      body.tags ?? []
+      body.tags ?? [],
+      body.assigneeId ?? null
     );
     created.parentTaskId = parentTaskId;
   } catch (e) {
@@ -74,8 +75,9 @@ export async function onRequestPost({ request, env }) {
   for (const subtask of body.subtasks) {
     const name = typeof subtask === 'string' ? subtask : subtask.name;
     const description = typeof subtask === 'string' ? '' : (subtask.description ?? '');
+    const subtaskAssigneeId = typeof subtask === 'string' ? null : (subtask.assigneeId ?? null);
     try {
-      const id = await tw.createSubtask(parentTaskId, name, description);
+      const id = await tw.createSubtask(parentTaskId, name, description, subtaskAssigneeId);
       created.subtaskIds.push(id);
     } catch (e) {
       created.partial = true;
@@ -99,8 +101,14 @@ function validate(body) {
   }
   if (!body.parentTaskName?.trim()) return 'parentTaskName required.';
   if (!Array.isArray(body.subtasks) || body.subtasks.length === 0) return 'subtasks must be a non-empty array.';
-  if (body.subtasks.some((s) => typeof s !== 'string' || !s.trim())) return 'each subtask must be a non-empty string.';
+  if (body.subtasks.some((s) => {
+    const name = typeof s === 'string' ? s : s?.name;
+    return !name?.trim();
+  })) return 'each subtask must have a non-empty name.';
   if (body.tags && !Array.isArray(body.tags)) return 'tags must be an array.';
+  if (body.assigneeId !== undefined && body.assigneeId !== null && typeof body.assigneeId !== 'number') {
+    return 'assigneeId must be a number.';
+  }
   return null;
 }
 
@@ -128,7 +136,7 @@ class TeamworkClient {
     };
   }
 
-  async createTask(tasklistId, name, description, tags) {
+  async createTask(tasklistId, name, description, tags, assigneeId) {
     const task = { name };
     if (description) task.description = description;
     const res = await fetch(
@@ -141,10 +149,21 @@ class TeamworkClient {
     );
     if (!res.ok) throw new Error(`task create ${res.status}: ${await res.text()}`);
     const data = await res.json();
-    return data.task.id;
+    const taskId = data.task.id;
+    if (assigneeId) await this.assignTask(taskId, assigneeId);
+    return taskId;
   }
 
-  async createSubtask(parentTaskId, name, description) {
+  async assignTask(taskId, assigneeId) {
+    const res = await fetch(`https://${this.domain}/tasks/${taskId}.json`, {
+      method: 'PUT',
+      headers: { Authorization: this.auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 'todo-item': { 'responsible-party-id': String(assigneeId) } }),
+    });
+    if (!res.ok) throw new Error(`assign ${res.status}: ${await res.text()}`);
+  }
+
+  async createSubtask(parentTaskId, name, description, assigneeId = null) {
     const task = { name };
     if (description) task.description = description;
     const res = await fetch(
@@ -157,6 +176,8 @@ class TeamworkClient {
     );
     if (!res.ok) throw new Error(`subtask create ${res.status}: ${await res.text()}`);
     const data = await res.json();
-    return data.task.id;
+    const subtaskId = data.task.id;
+    if (assigneeId) await this.assignTask(subtaskId, assigneeId);
+    return subtaskId;
   }
 }

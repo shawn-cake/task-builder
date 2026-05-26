@@ -55,8 +55,13 @@ const state = {
   selectedProject: null,        // { id, name } — set after picking (existing) or creating (new). For 'new', id is null until confirm.
   newProjectDraft: null,        // { name, description } — captured before preview when projectMode === 'new'
   existingTasklists: [],        // for the currently selected project
+  projectMembers: [],           // [{ id, name }] — loaded when an existing project is selected
   preview: null,                // { tasklistName, parentTaskName, subtasks, tasklistMode, ... }
+  batchItems: [],               // [{ description, clientType, assigneeId }] — one per prompt box
+  batchPreviews: [],            // array of preview objects, one per batch item
+  isBatchMode: false,
   selectedTemplate: TEMPLATES[0],
+  pendingGeneration: null,      // AbortController | null — cancelled when user navigates back
 };
 
 // ===== screen routing =====
@@ -65,19 +70,24 @@ function showScreen(id) {
   for (const el of document.querySelectorAll('.screen')) {
     el.dataset.active = el.id === `screen-${id}` ? 'true' : 'false';
   }
+  // Lazy-load projects the first time the picker is shown (or on re-entry).
+  if (id === 'pick-project') {
+    const term = searchInput?.value?.trim() ?? '';
+    loadProjects(term);
+  }
   const subtitleMap = {
-    'pick-project': 'Pick a project to start.',
-    'form': 'Fill in the campaign details.',
+    'form': 'Describe your task to get started.',
+    'pick-project': 'Pick a project to assign tasks to.',
     'preview': 'Review and edit before creating tasks.',
     'success': '',
   };
   const titleMap = {
-    'pick-project': 'Task Builder — Pick Project',
     'form': 'Task Builder — Configure',
+    'pick-project': 'Task Builder — Pick Project',
     'preview': 'Task Builder — Preview',
     'success': 'Task Builder — Done',
   };
-  const stepMap = { 'pick-project': 1, 'form': 2, 'preview': 3, 'success': 4 };
+  const stepMap = { 'form': 1, 'pick-project': 2, 'preview': 3, 'success': 4 };
   const currentStep = stepMap[id] ?? 1;
   document.querySelectorAll('.step-dot').forEach((dot, i) => {
     const step = i + 1;
@@ -89,7 +99,7 @@ function showScreen(id) {
   document.title = titleMap[id] ?? 'Task Builder';
 }
 
-// ===== screen 1: project picker (existing OR new) =====
+// ===== screen 2: project picker (existing OR new) =====
 
 const searchInput = document.getElementById('search');
 const projectResults = document.getElementById('project-results');
@@ -188,13 +198,23 @@ searchInput.addEventListener('input', (e) => {
   debounceTimer = setTimeout(() => loadProjects(term), 200);
 });
 
-// ===== screen 2: form =====
+// ===== screen 1: configure form =====
 
-const banner = document.getElementById('selected-project-banner');
+// ===== DOM refs =====
+const assigneeField = document.getElementById('assignee-field');
+const assigneeSelect = document.getElementById('assignee-select');
+const assigneeHint = document.getElementById('assignee-hint');
+const batchPanel = document.getElementById('batch-panel');
+const batchItemsContainer = document.getElementById('batch-items');
+const batchAddItemBtn = document.getElementById('batch-add-item');
+const batchStatus = document.getElementById('batch-status');
+
 const monthInput = document.getElementById('month');
 const tasklistNameSub = document.getElementById('preview-tasklist-name');
 const existingSelect = document.getElementById('existing-tasklist');
 const form = document.getElementById('campaign-form');
+const projectSelectedPanel = document.getElementById('project-selected-panel');
+const banner = document.getElementById('selected-project-banner');
 
 // Default the month input to the current month.
 {
@@ -208,11 +228,13 @@ function selectProject(project) {
   state.newProjectDraft = null;
   banner.innerHTML = `Selected project: <b></b> <span class="project-id">#${project.id}</span>`;
   banner.querySelector('b').textContent = project.name;
+  projectSelectedPanel.hidden = false;
   tasklistFieldset.hidden = false;
-  // Restore default tasklist mode (the radio markup defaults to "new")
   loadExistingTasklists(project.id);
+  loadProjectMembers(project.id);
+  assigneeField.hidden = false;
   updateTasklistPreview();
-  showScreen('form');
+  // Stay on pick-project screen; user clicks Continue →
 }
 
 newProjectForm.addEventListener('submit', (e) => {
@@ -228,17 +250,20 @@ newProjectForm.addEventListener('submit', (e) => {
   // the selected project. Final id is assigned at confirm time.
   state.selectedProject = { id: null, name };
   state.existingTasklists = [];
+  state.projectMembers = [];
   banner.innerHTML = `Creating new project: <b></b> <span class="project-id">(new)</span>`;
   banner.querySelector('b').textContent = name;
-  // No existing tasklists are possible inside a brand-new project — hide
-  // the whole tasklist-mode chooser; we always create a new tasklist.
+  projectSelectedPanel.hidden = false;
   tasklistFieldset.hidden = true;
-  // Force tasklistMode = "new" so updateTasklistPreview / form submit
-  // pick up the right value even though the radios are hidden.
-  const newRadio = form.querySelector('input[name="tasklistMode"][value="new"]');
+  const newRadio = document.querySelector('input[name="tasklistMode"][value="new"]');
   if (newRadio) newRadio.checked = true;
+  // Assignee not available for new projects — project doesn't exist yet
+  assigneeSelect.innerHTML = '<option value="">— Unassigned —</option>';
+  assigneeSelect.disabled = true;
+  assigneeHint.textContent = 'Assignee can be set after the project is created.';
+  assigneeField.hidden = false;
   updateTasklistPreview();
-  showScreen('form');
+  // Stay on pick-project screen; user clicks Continue →
 });
 
 async function loadExistingTasklists(projectId) {
@@ -270,6 +295,30 @@ async function loadExistingTasklists(projectId) {
   }
 }
 
+async function loadProjectMembers(projectId) {
+  state.projectMembers = [];
+  assigneeSelect.innerHTML = '<option value="">— Unassigned —</option>';
+  assigneeSelect.disabled = true;
+  assigneeHint.textContent = 'Loading team members…';
+  try {
+    const res = await fetch(`/api/projects/${projectId}/members`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { members } = await res.json();
+    state.projectMembers = members;
+    for (const m of members) {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name;
+      assigneeSelect.appendChild(opt);
+    }
+    assigneeSelect.disabled = false;
+    assigneeHint.textContent = '';
+  } catch (err) {
+    assigneeHint.textContent = `Could not load members: ${err.message}`;
+  }
+  renderBatchItems();
+}
+
 function fillPattern(pattern, vars) {
   let result = pattern.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
   // Collapse ". . " segments that result from an empty substitution (e.g. "SEO. . May" → "SEO. May")
@@ -296,19 +345,102 @@ const aiGeneratePrompt = document.getElementById('ai-generate-prompt');
 const aiGenerateStatus = document.getElementById('ai-generate-status');
 const templatePicker = document.getElementById('template-picker');
 
+const clientTypeFieldset = form.querySelector('fieldset:has(input[name="clientType"])');
+
 function setAiGenerateMode(isAi) {
   standardFields.hidden = isAi;
-  aiGeneratePanel.hidden = !isAi;
+  aiGeneratePanel.hidden = true; // batch panel replaces it for AI Generate
+  batchPanel.hidden = !isAi;
   templatePicker.hidden = isAi;
+  // AI Generate: per-item contract type inside each prompt box; templates: global fieldset
+  if (clientTypeFieldset) clientTypeFieldset.hidden = isAi;
+  assigneeField.hidden = isAi;
+  state.isBatchMode = isAi;
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.textContent = isAi ? 'Generate preview →' : 'Preview tasks →';
-  if (isAi) tasklistNameSub.textContent = '(AI will generate)';
-  const hint = document.getElementById('client-type-hint');
-  if (hint) {
-    hint.textContent = isAi
-      ? 'Passed to the AI to help name the tasklist.'
-      : 'Appears in the tasklist name—see preview below.';
+  if (isAi) {
+    tasklistNameSub.textContent = '(AI will generate)';
+    if (state.batchItems.length === 0) addBatchItem();
+    renderBatchItems();
   }
+}
+
+// ===== batch item management =====
+
+function makeBatchItem() {
+  return { description: '', clientType: 'C', assigneeId: null };
+}
+
+function addBatchItem() {
+  state.batchItems.push(makeBatchItem());
+  renderBatchItems();
+}
+
+function removeBatchItem(index) {
+  state.batchItems.splice(index, 1);
+  if (state.batchItems.length === 0) addBatchItem();
+  else renderBatchItems();
+}
+
+function renderBatchItems() {
+  batchItemsContainer.innerHTML = '';
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn && state.isBatchMode) {
+    submitBtn.textContent = state.batchItems.length > 1 ? 'Generate previews →' : 'Generate preview →';
+  }
+  state.batchItems.forEach((item, idx) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'batch-item';
+    wrap.dataset.index = idx;
+
+    // Header row — only shown for non-first items so the remove button
+    // sits clearly above the textarea instead of overlapping it.
+    if (idx > 0) {
+      const itemHeader = document.createElement('div');
+      itemHeader.className = 'batch-item-header';
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'batch-item-remove';
+      removeBtn.title = 'Remove';
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', () => removeBatchItem(idx));
+      itemHeader.appendChild(removeBtn);
+      wrap.appendChild(itemHeader);
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'batch-item-textarea';
+    textarea.rows = 6;
+    textarea.placeholder = 'Describe the task, or paste content from an email, meeting notes, etc.';
+    textarea.value = item.description;
+    textarea.addEventListener('input', () => {
+      state.batchItems[idx].description = textarea.value;
+    });
+
+    // Contract type radios only — assignee is picked per-card after project selection (step 3)
+    const metaRow = document.createElement('div');
+    metaRow.className = 'batch-item-meta';
+
+    const ctWrap = document.createElement('div');
+    ctWrap.className = 'batch-item-client-type';
+    for (const [val, lbl] of [['C', 'Contract'], ['H', 'Hourly'], ['G', 'Gratis'], ['', 'None']]) {
+      const radioLabel = document.createElement('label');
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = `batchClientType_${idx}`;
+      radio.value = val;
+      radio.checked = item.clientType === val;
+      radio.addEventListener('change', () => { state.batchItems[idx].clientType = val; });
+      radioLabel.appendChild(radio);
+      radioLabel.appendChild(document.createTextNode(` ${lbl}`));
+      ctWrap.appendChild(radioLabel);
+    }
+
+    metaRow.appendChild(ctWrap);
+    wrap.appendChild(textarea);
+    wrap.appendChild(metaRow);
+    batchItemsContainer.appendChild(wrap);
+  });
 }
 
 function updateTasklistPreview() {
@@ -336,12 +468,15 @@ form.addEventListener('change', (e) => {
   }
 });
 
+batchAddItemBtn.addEventListener('click', addBatchItem);
+
 // React to form changes that affect the preview name
 form.addEventListener('change', updateTasklistPreview);
 monthInput.addEventListener('input', updateTasklistPreview);
 
-// Enable/disable existing-tasklist dropdown based on mode
-form.addEventListener('change', (e) => {
+// Enable/disable existing-tasklist dropdown based on mode.
+// tasklistMode radios are now in project-selected-panel (not inside the form).
+document.addEventListener('change', (e) => {
   if (e.target.name === 'tasklistMode') {
     const useExisting = e.target.value === 'existing';
     existingSelect.disabled = !useExisting || state.existingTasklists.length === 0;
@@ -350,88 +485,158 @@ form.addEventListener('change', (e) => {
 
 // Clicking the nested select auto-selects its parent radio
 existingSelect.addEventListener('focus', () => {
-  const radio = form.querySelector('input[name="tasklistMode"][value="existing"]');
+  const radio = document.querySelector('input[name="tasklistMode"][value="existing"]');
   if (radio && !radio.checked) {
     radio.checked = true;
     radio.dispatchEvent(new Event('change', { bubbles: true }));
   }
 });
 
-document.getElementById('back-to-projects').addEventListener('click', () => {
-  showScreen('pick-project');
+// back-to-configure: pick-project → form
+document.getElementById('back-to-configure').addEventListener('click', () => {
+  projectSelectedPanel.hidden = true;
+  state.selectedProject = null;
+  state.projectMembers = [];
+  state.existingTasklists = [];
+  showScreen('form');
 });
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-
-  const tlMode =
-    state.projectMode === 'new'
-      ? 'new'
-      : form.querySelector('input[name="tasklistMode"]:checked').value;
+// continue-to-preview: pick-project → preview (single-task / template)
+document.getElementById('continue-to-preview').addEventListener('click', () => {
+  const tlMode = state.projectMode === 'new'
+    ? 'new'
+    : document.querySelector('input[name="tasklistMode"]:checked')?.value ?? 'new';
 
   if (tlMode === 'existing' && !existingSelect.value) {
     alert('Pick an existing tasklist or switch to "Create new".');
     return;
   }
+  if (!state.preview) return;
+
+  state.preview.projectMode = state.projectMode;
+  state.preview.newProject = state.projectMode === 'new' ? { ...state.newProjectDraft } : null;
+  state.preview.tasklistMode = tlMode;
+  state.preview.existingTasklistId = tlMode === 'existing' ? Number(existingSelect.value) : null;
+  state.preview.existingTasklistName = tlMode === 'existing'
+    ? state.existingTasklists.find((tl) => tl.id === Number(existingSelect.value))?.name
+    : null;
+  state.preview.assigneeId = assigneeSelect.value ? Number(assigneeSelect.value) : null;
+
+  renderPreview();
+  showScreen('preview');
+});
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
 
   const submitBtn = form.querySelector('button[type="submit"]');
 
-  // ===== AI Generate path =====
-  if (state.selectedTemplate.id === 'ai-generate') {
-    const description = aiGeneratePrompt.value.trim();
-    if (!description) {
-      setStatus(aiGenerateStatus, 'Add a description first.', true);
-      aiGeneratePrompt.focus();
+  // ===== Batch AI path =====
+  // No project selected yet — each card gets its own project selector on the preview screen.
+  if (state.isBatchMode) {
+    const validItems = state.batchItems.filter((item) => item.description.trim());
+    if (validItems.length === 0) {
+      setStatus(batchStatus, 'Add at least one action item description.', true);
       return;
     }
-    const clientType = form.querySelector('input[name="clientType"]:checked')?.value ?? '';
+    // Cancel any previous in-flight generation (e.g. user went back mid-flight).
+    if (state.pendingGeneration) state.pendingGeneration.abort();
+    const abortCtrl = new AbortController();
+    state.pendingGeneration = abortCtrl;
+
     submitBtn.disabled = true;
     const originalLabel = submitBtn.textContent;
     submitBtn.textContent = 'Generating…';
-    setStatus(aiGenerateStatus, 'Generating your tasklist…');
+    setStatus(batchStatus, `Generating ${validItems.length} task${validItems.length === 1 ? '' : 's'}…`);
     try {
-      const res = await fetch('/api/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'design',
-          description,
-          projectName: state.selectedProject?.name ?? state.newProjectDraft?.name,
-          clientType,
-        }),
-      });
-      const result = await res.json();
-      if (!res.ok) {
-        setStatus(aiGenerateStatus, `Error: ${result.error || res.statusText}`, true);
+      const results = await Promise.all(
+        validItems.map((item) =>
+          fetch('/api/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'design',
+              description: item.description,
+              clientType: item.clientType,
+              existingTasklists: [],
+            }),
+            signal: abortCtrl.signal,
+          }).then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+        )
+      );
+      const failures = results.filter((r) => !r.ok);
+      if (failures.length === results.length) {
+        setStatus(batchStatus, `All generations failed: ${failures[0]?.data?.error ?? 'unknown error'}`, true);
         return;
       }
-      setStatus(aiGenerateStatus, '');
-      state.preview = {
-        projectMode: state.projectMode,
-        newProject: state.projectMode === 'new' ? { ...state.newProjectDraft } : null,
-        tasklistMode: tlMode,
-        tasklistName: result.tasklistName,
-        existingTasklistId: tlMode === 'existing' ? Number(existingSelect.value) : null,
-        existingTasklistName:
-          tlMode === 'existing'
-            ? state.existingTasklists.find((tl) => tl.id === Number(existingSelect.value))?.name
-            : null,
-        parentTaskName: result.parentTaskName,
-        parentTaskDescription: result.parentTaskDescription ?? '',
-        subtasks: result.subtasks, // [{ name, description }]
-        templateId: 'ai-generate',
-        templateName: 'AI Generate',
-        tags: [],
-        notes: description,
-        monthLabel: '',
-        clientType,
-        aiFallback: false,
-      };
-      renderPreview();
-      showScreen('preview');
+      const successResults = results.filter((r) => r.ok);
+
+      if (failures.length > 0) {
+        setStatus(batchStatus, `${failures.length} item${failures.length === 1 ? '' : 's'} failed to generate and were skipped.`, true);
+      } else {
+        setStatus(batchStatus, '');
+      }
+
+      if (successResults.length === 1) {
+        // Single result — use single-task preview; go to pick-project for project assignment.
+        const data = successResults[0].data;
+        const item = validItems[results.indexOf(successResults[0])];
+        state.preview = {
+          // project fields filled in by continue-to-preview after project is picked
+          tasklistMode: 'new',
+          tasklistName: data.tasklistName,
+          parentTaskName: data.parentTaskName,
+          parentTaskDescription: data.parentTaskDescription ?? '',
+          subtasks: data.subtasks,
+          templateId: 'ai-generate',
+          templateName: 'AI Generate',
+          tags: [],
+          notes: item.description,
+          monthLabel: '',
+          clientType: item.clientType,
+          assigneeId: item.assigneeId,
+          aiFallback: false,
+        };
+        state.isBatchMode = false;
+        showScreen('pick-project');
+      } else {
+        // Multiple results — go straight to preview with per-card project selectors.
+        state.batchPreviews = results.map((r, i) => {
+          if (!r.ok) return null;
+          const result = r.data;
+          return {
+            // Per-card project (filled when PM picks a project on the preview card)
+            projectId: null,
+            projectName: null,
+            projectMode: 'existing',
+            projectMembers: [],
+            existingTasklists: [],
+            tasklistMode: 'new',
+            existingTasklistId: null,
+            existingTasklistName: null,
+            // AI-generated content
+            tasklistName: result.tasklistName,
+            parentTaskName: result.parentTaskName,
+            parentTaskDescription: result.parentTaskDescription ?? '',
+            subtasks: result.subtasks,
+            templateId: 'ai-generate',
+            templateName: 'AI Generate',
+            tags: [],
+            clientType: validItems[i].clientType,
+            assigneeId: validItems[i].assigneeId,
+            failed: false,
+          };
+        }).filter(Boolean);
+        renderBatchPreview();
+        showScreen('preview');
+      }
     } catch (err) {
-      setStatus(aiGenerateStatus, `Error: ${err.message}`, true);
+      // AbortError means the user navigated away — don't show an error.
+      if (err.name !== 'AbortError') {
+        setStatus(batchStatus, `Error: ${err.message}`, true);
+      }
     } finally {
+      if (state.pendingGeneration === abortCtrl) state.pendingGeneration = null;
       submitBtn.disabled = false;
       submitBtn.textContent = originalLabel;
     }
@@ -439,11 +644,11 @@ form.addEventListener('submit', async (e) => {
   }
 
   // ===== Standard template path =====
+  // Generate the preview content here; project is picked on the next screen.
   const vars = currentFormVars();
   const notes = document.getElementById('notes').value.trim();
 
-  // Run the AI tune pass only when the PM actually wrote notes. Empty notes
-  // = no work for the model to do; skip the call and save the round-trip.
+  // Run the AI tune pass only when the PM actually wrote notes.
   let subtasks = state.selectedTemplate.subtasks.map((name) => ({ name, description: '' }));
   let aiFallback = false;
   if (notes) {
@@ -459,7 +664,6 @@ form.addEventListener('submit', async (e) => {
           subtasks: subtasks.map((s) => s.name),
           notes,
           templateName: state.selectedTemplate.name,
-          projectName: state.selectedProject?.name ?? state.newProjectDraft?.name,
           monthLabel: vars.monthLabel,
           clientType: vars.clientType,
         }),
@@ -479,30 +683,26 @@ form.addEventListener('submit', async (e) => {
     }
   }
 
+  // Build preview without project info — filled in by continue-to-preview.
   state.preview = {
-    projectMode: state.projectMode,
-    newProject: state.projectMode === 'new' ? { ...state.newProjectDraft } : null,
-    tasklistMode: tlMode,
+    tasklistMode: 'new', // overridden by continue-to-preview
     tasklistName: fillPattern(state.selectedTemplate.tasklistNamePattern, vars),
-    existingTasklistId: tlMode === 'existing' ? Number(existingSelect.value) : null,
-    existingTasklistName:
-      tlMode === 'existing'
-        ? state.existingTasklists.find((tl) => tl.id === Number(existingSelect.value))?.name
-        : null,
+    existingTasklistId: null,
+    existingTasklistName: null,
     parentTaskName: fillPattern(state.selectedTemplate.parentTaskNamePattern, vars),
     parentTaskDescription: '',
-    subtasks, // [{ name, description }]
+    subtasks,
     templateId: state.selectedTemplate.id,
     templateName: state.selectedTemplate.name,
     tags: state.selectedTemplate.defaultTags,
     notes,
     monthLabel: vars.monthLabel,
     clientType: vars.clientType,
+    assigneeId: null,
     aiFallback,
   };
 
-  renderPreview();
-  showScreen('preview');
+  showScreen('pick-project');
 });
 
 // ===== screen 3: preview =====
@@ -511,6 +711,8 @@ const previewProject = document.getElementById('preview-project');
 const previewTasklist = document.getElementById('preview-tasklist');
 const previewParentTask = document.getElementById('preview-parent-task');
 const previewParentDesc = document.getElementById('preview-parent-desc');
+const previewAssigneeRow = document.getElementById('preview-assignee-row');
+const previewAssigneeSelect = document.getElementById('preview-assignee-select');
 const previewSubtasks = document.getElementById('preview-subtasks');
 const previewStatus = document.getElementById('preview-status');
 const previewNewProjectRow = document.getElementById('preview-new-project-row');
@@ -520,13 +722,17 @@ const confirmBtn = document.getElementById('confirm-create');
 let dragSrcIdx = null;
 
 function autoResize(el) {
-  requestAnimationFrame(() => {
-    el.style.height = '1px';
-    el.style.height = `${el.scrollHeight}px`;
-  });
+  el.style.height = '1px';
+  const cssMax = parseFloat(window.getComputedStyle(el).maxHeight) || Infinity;
+  const capped = Math.min(el.scrollHeight, cssMax);
+  el.style.height = `${capped}px`;
+  // Once content exceeds the cap, let CSS overflow-y handle scrolling.
+  // For uncapped elements keep overflow hidden so no scrollbar flash.
+  el.style.overflowY = el.scrollHeight > cssMax ? 'auto' : 'hidden';
 }
 
 function renderPreview() {
+  setBatchPreviewVisible(false);
   const p = state.preview;
   if (p.projectMode === 'new') {
     previewNewProjectRow.hidden = false;
@@ -546,6 +752,24 @@ function renderPreview() {
   autoResize(previewParentTask);
   previewParentDesc.value = p.parentTaskDescription ?? '';
   autoResize(previewParentDesc);
+
+  // Parent task assignee row
+  if (state.projectMembers.length > 0) {
+    previewAssigneeRow.hidden = false;
+    previewAssigneeSelect.innerHTML = '<option value="">— Unassigned —</option>';
+    for (const m of state.projectMembers) {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name;
+      opt.selected = p.assigneeId != null && p.assigneeId === m.id;
+      previewAssigneeSelect.appendChild(opt);
+    }
+    previewAssigneeSelect.onchange = () => {
+      state.preview.assigneeId = previewAssigneeSelect.value ? Number(previewAssigneeSelect.value) : null;
+    };
+  } else {
+    previewAssigneeRow.hidden = true;
+  }
 
   previewSubtasks.innerHTML = '';
   p.subtasks.forEach((subtask, idx) => {
@@ -576,7 +800,7 @@ function renderPreview() {
     desc.className = 'subtask-desc';
     desc.value = subtask.description ?? '';
     desc.rows = 1;
-    desc.placeholder = 'Add a note…';
+    desc.placeholder = 'Description…';
     desc.dataset.index = String(idx);
     desc.addEventListener('input', () => {
       state.preview.subtasks[Number(desc.dataset.index)].description = desc.value;
@@ -628,6 +852,28 @@ function renderPreview() {
 
     body.appendChild(input);
     body.appendChild(desc);
+
+    if (state.projectMembers.length > 0) {
+      const subtaskAssignSel = document.createElement('select');
+      subtaskAssignSel.className = 'subtask-assignee';
+      const unassignedOpt = document.createElement('option');
+      unassignedOpt.value = '';
+      unassignedOpt.textContent = '— Unassigned —';
+      subtaskAssignSel.appendChild(unassignedOpt);
+      for (const m of state.projectMembers) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name;
+        opt.selected = subtask.assigneeId != null && subtask.assigneeId === m.id;
+        subtaskAssignSel.appendChild(opt);
+      }
+      subtaskAssignSel.addEventListener('change', () => {
+        state.preview.subtasks[Number(input.dataset.index)].assigneeId =
+          subtaskAssignSel.value ? Number(subtaskAssignSel.value) : null;
+      });
+      body.appendChild(subtaskAssignSel);
+    }
+
     li.appendChild(handle);
     li.appendChild(body);
     li.appendChild(remove);
@@ -646,6 +892,23 @@ function renderPreview() {
     setStatus(previewStatus, '');
   }
 
+  // Add subtask button (single-task mode)
+  let addSubtaskBtn = document.getElementById('add-subtask-btn');
+  if (!addSubtaskBtn) {
+    addSubtaskBtn = document.createElement('button');
+    addSubtaskBtn.type = 'button';
+    addSubtaskBtn.id = 'add-subtask-btn';
+    addSubtaskBtn.className = 'ghost small';
+    addSubtaskBtn.textContent = '+ Add subtask';
+    previewSubtasks.after(addSubtaskBtn);
+  }
+  addSubtaskBtn.onclick = () => {
+    state.preview.subtasks.push({ name: '', description: '' });
+    renderPreview();
+    const inputs = previewSubtasks.querySelectorAll('.subtask-input');
+    inputs[inputs.length - 1]?.focus();
+  };
+
   // Confirmation summary line above the actions bar
   const confirmSummary = document.getElementById('confirm-summary');
   if (confirmSummary) {
@@ -660,6 +923,526 @@ function renderPreview() {
       : p.existingTasklistName;
     confirmSummary.textContent = `${count} ${noun} → ${projectName} · ${tasklistName}`;
   }
+}
+
+// ===== batch preview =====
+
+const batchPreviewCards = document.getElementById('batch-preview-cards');
+const singlePreviewSummary = document.querySelector('#screen-preview .preview-summary');
+const subtasksHeaderEl = document.querySelector('#screen-preview .subtasks-header');
+const regeneratePanelContainer = document.getElementById('regenerate-panel');
+const subtastsHintEl = document.getElementById('subtasks-hint');
+
+function setBatchPreviewVisible(isBatch) {
+  batchPreviewCards.hidden = !isBatch;
+  if (singlePreviewSummary) singlePreviewSummary.hidden = isBatch;
+  if (subtasksHeaderEl) subtasksHeaderEl.hidden = isBatch;
+  if (regeneratePanelContainer) regeneratePanelContainer.hidden = true;
+  if (subtastsHintEl) subtastsHintEl.hidden = isBatch;
+  previewSubtasks.hidden = isBatch;
+  const addStBtn = document.getElementById('add-subtask-btn');
+  if (addStBtn) addStBtn.hidden = isBatch;
+  document.getElementById('confirm-create').textContent = isBatch ? 'Confirm & create all' : 'Confirm & create';
+  const toggleBtn = document.getElementById('toggle-regenerate');
+  if (toggleBtn) toggleBtn.hidden = isBatch;
+}
+
+function updateBatchConfirmSummary() {
+  const confirmSummary = document.getElementById('confirm-summary');
+  if (!confirmSummary) return;
+  const total = state.batchPreviews.reduce((n, p) => n + p.subtasks.length, 0);
+  const unassigned = state.batchPreviews.filter((p) => !p.projectId).length;
+  let text = `${state.batchPreviews.length} task${state.batchPreviews.length === 1 ? '' : 's'} · ${total} subtask${total === 1 ? '' : 's'}`;
+  if (unassigned > 0) text += ` · ⚠ ${unassigned} need a project`;
+  confirmSummary.textContent = text;
+}
+
+function renderBatchPreview() {
+  setBatchPreviewVisible(true);
+  batchPreviewCards.innerHTML = '';
+
+  state.batchPreviews.forEach((p, cardIdx) => {
+    const card = document.createElement('div');
+    card.className = 'batch-preview-card';
+    card.dataset.cardIndex = cardIdx;
+
+    // ----- Header -----
+    const header = document.createElement('div');
+    header.className = 'batch-preview-card-header';
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'batch-card-toggle ghost small';
+    toggleBtn.setAttribute('aria-expanded', 'true');
+
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'batch-card-title';
+    titleSpan.textContent = p.tasklistName;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'ghost small batch-card-remove';
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', () => {
+      state.batchPreviews.splice(cardIdx, 1);
+      renderBatchPreview();
+    });
+
+    header.appendChild(toggleBtn);
+    header.appendChild(titleSpan);
+    header.appendChild(removeBtn);
+
+    // ----- Body -----
+    const body = document.createElement('div');
+    body.className = 'batch-preview-card-body';
+
+    // ----- Per-card project picker -----
+    const projectRow = document.createElement('div');
+    projectRow.className = 'preview-row batch-card-project-row';
+    const projectLabel = document.createElement('span');
+    projectLabel.className = 'preview-label';
+    projectLabel.textContent = 'Project';
+
+    const projectPicker = document.createElement('div');
+    projectPicker.className = 'batch-card-project-picker';
+
+    // Display when a project is already selected
+    const projectSelectedEl = document.createElement('div');
+    projectSelectedEl.className = 'batch-card-project-selected';
+    projectSelectedEl.hidden = !p.projectId;
+
+    // Search UI (shown when no project selected)
+    const projectSearchWrap = document.createElement('div');
+    projectSearchWrap.className = 'batch-card-project-search';
+    projectSearchWrap.hidden = !!p.projectId;
+
+    const projectSearchInput = document.createElement('input');
+    projectSearchInput.type = 'search';
+    projectSearchInput.placeholder = 'Search projects…';
+    projectSearchInput.className = 'batch-card-project-search-input';
+
+    const projectSearchStatus = document.createElement('div');
+    projectSearchStatus.className = 'status';
+    projectSearchStatus.setAttribute('aria-live', 'polite');
+
+    const projectSearchResults = document.createElement('ul');
+    projectSearchResults.className = 'results batch-card-project-results';
+    projectSearchResults.setAttribute('role', 'listbox');
+
+    projectSearchWrap.appendChild(projectSearchInput);
+    projectSearchWrap.appendChild(projectSearchStatus);
+    projectSearchWrap.appendChild(projectSearchResults);
+
+    let cardDebounce = null;
+    let cardReqId = 0;
+
+    async function searchCardProjects(term) {
+      const reqId = ++cardReqId;
+      setStatus(projectSearchStatus, term ? `Searching for "${term}"…` : 'Loading…');
+      const url = new URL('/api/projects', window.location.origin);
+      if (term) url.searchParams.set('search', term);
+      try {
+        const res = await fetch(url);
+        if (reqId !== cardReqId) return;
+        if (!res.ok) { setStatus(projectSearchStatus, `Error: ${res.statusText}`, true); return; }
+        const { projects } = await res.json();
+        projectSearchResults.innerHTML = '';
+        for (const proj of projects) {
+          const li = document.createElement('li');
+          li.tabIndex = 0;
+          li.setAttribute('role', 'option');
+          li.innerHTML = '<span class="project-name"></span><span class="project-id"></span>';
+          li.querySelector('.project-name').textContent = proj.name;
+          li.querySelector('.project-id').textContent = `#${proj.id}`;
+          li.addEventListener('click', () => pickCardProject(proj));
+          li.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pickCardProject(proj); }
+          });
+          projectSearchResults.appendChild(li);
+        }
+        setStatus(projectSearchStatus, projects.length === 0 ? 'No projects matched.' : '');
+      } catch (err) {
+        if (reqId !== cardReqId) return;
+        setStatus(projectSearchStatus, `Network error: ${err.message}`, true);
+      }
+    }
+
+    projectSearchInput.addEventListener('input', (ev) => {
+      clearTimeout(cardDebounce);
+      cardDebounce = setTimeout(() => searchCardProjects(ev.target.value.trim()), 200);
+    });
+    projectSearchInput.addEventListener('focus', () => {
+      if (!projectSearchResults.children.length) searchCardProjects('');
+    });
+
+    function renderProjectSelectedEl() {
+      projectSelectedEl.innerHTML = '';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'project-name';
+      nameSpan.textContent = p.projectName;
+      const changeBtn = document.createElement('button');
+      changeBtn.type = 'button';
+      changeBtn.className = 'ghost small';
+      changeBtn.textContent = 'Change';
+      changeBtn.addEventListener('click', () => {
+        p.projectId = null;
+        p.projectName = null;
+        p.projectMembers = [];
+        p.assigneeId = null;
+        projectSelectedEl.hidden = true;
+        projectSearchWrap.hidden = false;
+        projectSearchInput.value = '';
+        projectSearchResults.innerHTML = '';
+        setStatus(projectSearchStatus, '');
+        refreshCardAssignee();
+        renderCardSubtasks();
+        updateBatchConfirmSummary();
+      });
+      projectSelectedEl.appendChild(nameSpan);
+      projectSelectedEl.appendChild(changeBtn);
+    }
+    if (p.projectId) renderProjectSelectedEl();
+
+    async function pickCardProject(proj) {
+      p.projectId = proj.id;
+      p.projectName = proj.name;
+      p.projectMembers = [];
+      p.assigneeId = null;
+      renderProjectSelectedEl();
+      projectSelectedEl.hidden = false;
+      projectSearchWrap.hidden = true;
+      setStatus(projectSearchStatus, '');
+      try {
+        const res = await fetch(`/api/projects/${proj.id}/members`);
+        if (res.ok) {
+          const { members } = await res.json();
+          p.projectMembers = members;
+          refreshCardAssignee();
+          renderCardSubtasks();
+        }
+      } catch { /* members stay empty */ }
+      updateBatchConfirmSummary();
+    }
+
+    // Close dropdown when clicking outside the search wrap
+    function onDocClickCard(e) {
+      if (!projectSearchWrap.contains(e.target)) {
+        projectSearchResults.innerHTML = '';
+        setStatus(projectSearchStatus, '');
+      }
+    }
+    document.addEventListener('click', onDocClickCard);
+    // Clean up listener if card is later removed
+    card.addEventListener('remove', () => document.removeEventListener('click', onDocClickCard));
+
+    projectPicker.appendChild(projectSelectedEl);
+    projectPicker.appendChild(projectSearchWrap);
+    projectRow.appendChild(projectLabel);
+    projectRow.appendChild(projectPicker);
+
+    // ----- Tasklist name -----
+    const tlRow = document.createElement('div');
+    tlRow.className = 'preview-row';
+    const tlLabel = document.createElement('span');
+    tlLabel.className = 'preview-label';
+    tlLabel.textContent = 'Tasklist';
+    const tlInput = document.createElement('textarea');
+    tlInput.className = 'inline-edit';
+    tlInput.rows = 1;
+    tlInput.value = p.tasklistName;
+    tlInput.addEventListener('input', () => {
+      state.batchPreviews[cardIdx].tasklistName = tlInput.value;
+      titleSpan.textContent = tlInput.value || `Task ${cardIdx + 1}`;
+      autoResize(tlInput);
+    });
+    tlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+    tlRow.appendChild(tlLabel);
+    tlRow.appendChild(tlInput);
+
+    // ----- Parent task -----
+    const ptRow = document.createElement('div');
+    ptRow.className = 'preview-row preview-row--top';
+    const ptLabel = document.createElement('span');
+    ptLabel.className = 'preview-label';
+    ptLabel.textContent = 'Parent task';
+    const ptStack = document.createElement('div');
+    ptStack.className = 'inline-stack';
+    const ptInput = document.createElement('textarea');
+    ptInput.className = 'inline-edit';
+    ptInput.rows = 1;
+    ptInput.value = p.parentTaskName;
+    ptInput.addEventListener('input', () => {
+      state.batchPreviews[cardIdx].parentTaskName = ptInput.value;
+      autoResize(ptInput);
+    });
+    ptInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+    const pdInput = document.createElement('textarea');
+    pdInput.className = 'inline-edit inline-edit--desc';
+    pdInput.rows = 1;
+    pdInput.placeholder = 'Description…';
+    pdInput.value = p.parentTaskDescription ?? '';
+    pdInput.addEventListener('input', () => {
+      state.batchPreviews[cardIdx].parentTaskDescription = pdInput.value;
+      autoResize(pdInput);
+    });
+    ptStack.appendChild(ptInput);
+    ptStack.appendChild(pdInput);
+    ptRow.appendChild(ptLabel);
+    ptRow.appendChild(ptStack);
+
+    // ----- Assignee row (shown after members load) -----
+    const asRow = document.createElement('div');
+    asRow.className = 'preview-row';
+    asRow.hidden = true;
+    const asLabel = document.createElement('span');
+    asLabel.className = 'preview-label';
+    asLabel.textContent = 'Assignee';
+    const asSel = document.createElement('select');
+    asSel.className = 'preview-assignee-select';
+    asSel.innerHTML = '<option value="">— Unassigned —</option>';
+    asSel.addEventListener('change', () => {
+      state.batchPreviews[cardIdx].assigneeId = asSel.value ? Number(asSel.value) : null;
+    });
+    asRow.appendChild(asLabel);
+    asRow.appendChild(asSel);
+
+    function refreshCardAssignee() {
+      if (p.projectMembers.length > 0) {
+        asSel.innerHTML = '<option value="">— Unassigned —</option>';
+        for (const m of p.projectMembers) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name;
+          opt.selected = p.assigneeId != null && p.assigneeId === m.id;
+          asSel.appendChild(opt);
+        }
+        asRow.hidden = false;
+      } else {
+        asRow.hidden = true;
+      }
+    }
+    refreshCardAssignee();
+
+    // ----- Subtasks -----
+    const stHeader = document.createElement('div');
+    stHeader.className = 'subtasks-header';
+    const stTitle = document.createElement('h2');
+    stTitle.className = 'section-label';
+    stTitle.textContent = 'Subtasks';
+    stHeader.appendChild(stTitle);
+
+    const subtaskList = document.createElement('ol');
+    subtaskList.className = 'subtasks';
+
+    function renderCardSubtasks() {
+      subtaskList.innerHTML = '';
+      const toResize = [];
+      let cardDragSrcIdx = null; // per-card drag source; shared across all li listeners in this render
+      p.subtasks.forEach((subtask, stIdx) => {
+        const li = document.createElement('li');
+        li.setAttribute('draggable', 'true');
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle';
+        handle.setAttribute('aria-hidden', 'true');
+        const stBody = document.createElement('div');
+        stBody.className = 'subtask-body';
+        const stInput = document.createElement('textarea');
+        stInput.className = 'subtask-input';
+        stInput.value = subtask.name;
+        stInput.rows = 1;
+        stInput.addEventListener('input', () => {
+          state.batchPreviews[cardIdx].subtasks[stIdx].name = stInput.value;
+          autoResize(stInput);
+        });
+        stInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+        const stDesc = document.createElement('textarea');
+        stDesc.className = 'subtask-desc';
+        stDesc.value = subtask.description ?? '';
+        stDesc.rows = 1;
+        stDesc.placeholder = 'Description…';
+        stDesc.addEventListener('input', () => {
+          state.batchPreviews[cardIdx].subtasks[stIdx].description = stDesc.value;
+          autoResize(stDesc);
+        });
+        stDesc.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+        const stRemove = document.createElement('button');
+        stRemove.type = 'button';
+        stRemove.className = 'remove';
+        stRemove.title = 'Remove subtask';
+        stRemove.textContent = '×';
+        stRemove.addEventListener('click', () => {
+          state.batchPreviews[cardIdx].subtasks.splice(stIdx, 1);
+          renderCardSubtasks();
+        });
+
+        // Drag-to-reorder (mirrors single-task preview behaviour)
+        li.addEventListener('dragstart', (e) => {
+          cardDragSrcIdx = stIdx;
+          e.dataTransfer.effectAllowed = 'move';
+          setTimeout(() => li.classList.add('dragging'), 0);
+        });
+        li.addEventListener('dragend', () => {
+          li.classList.remove('dragging');
+          subtaskList.querySelectorAll('li').forEach((el) => el.classList.remove('drag-over'));
+        });
+        li.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (cardDragSrcIdx !== stIdx) {
+            subtaskList.querySelectorAll('li').forEach((el) => el.classList.remove('drag-over'));
+            li.classList.add('drag-over');
+          }
+        });
+        li.addEventListener('dragleave', (e) => {
+          if (!li.contains(e.relatedTarget)) li.classList.remove('drag-over');
+        });
+        li.addEventListener('drop', (e) => {
+          e.preventDefault();
+          li.classList.remove('drag-over');
+          if (cardDragSrcIdx === null || cardDragSrcIdx === stIdx) return;
+          const subtasks = state.batchPreviews[cardIdx].subtasks;
+          const [moved] = subtasks.splice(cardDragSrcIdx, 1);
+          subtasks.splice(stIdx, 0, moved);
+          cardDragSrcIdx = null;
+          renderCardSubtasks();
+        });
+
+        stBody.appendChild(stInput);
+        stBody.appendChild(stDesc);
+
+        if (p.projectMembers.length > 0) {
+          const stAssignSel = document.createElement('select');
+          stAssignSel.className = 'subtask-assignee';
+          const stNoneOpt = document.createElement('option');
+          stNoneOpt.value = '';
+          stNoneOpt.textContent = '— Unassigned —';
+          stAssignSel.appendChild(stNoneOpt);
+          for (const m of p.projectMembers) {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.name;
+            opt.selected = subtask.assigneeId != null && subtask.assigneeId === m.id;
+            stAssignSel.appendChild(opt);
+          }
+          stAssignSel.addEventListener('change', () => {
+            state.batchPreviews[cardIdx].subtasks[stIdx].assigneeId =
+              stAssignSel.value ? Number(stAssignSel.value) : null;
+          });
+          stBody.appendChild(stAssignSel);
+        }
+
+        li.appendChild(handle);
+        li.appendChild(stBody);
+        li.appendChild(stRemove);
+        subtaskList.appendChild(li);
+        // Collect for deferred resize — elements must be in the live DOM first.
+        toResize.push(stInput, stDesc);
+      });
+      // Resize after the browser has laid out the subtaskList in the document.
+      requestAnimationFrame(() => toResize.forEach(el => autoResize(el)));
+    }
+    renderCardSubtasks();
+
+    const addStBtn = document.createElement('button');
+    addStBtn.type = 'button';
+    addStBtn.className = 'ghost small';
+    addStBtn.textContent = '+ Add subtask';
+    addStBtn.addEventListener('click', () => {
+      state.batchPreviews[cardIdx].subtasks.push({ name: '', description: '' });
+      renderCardSubtasks();
+      const inputs = subtaskList.querySelectorAll('.subtask-input');
+      inputs[inputs.length - 1]?.focus();
+    });
+
+    body.appendChild(projectRow);
+    body.appendChild(tlRow);
+    body.appendChild(ptRow);
+    body.appendChild(asRow);
+    body.appendChild(stHeader);
+    body.appendChild(document.createRange().createContextualFragment('<p class="hint">Click to edit · clear to remove.</p>'));
+    body.appendChild(subtaskList);
+    body.appendChild(addStBtn);
+
+    toggleBtn.addEventListener('click', () => {
+      const isOpen = body.hidden;
+      body.hidden = !isOpen;
+      toggleBtn.setAttribute('aria-expanded', String(isOpen));
+    });
+
+    card.appendChild(header);
+    card.appendChild(body);
+    batchPreviewCards.appendChild(card);
+
+    requestAnimationFrame(() => {
+      autoResize(tlInput);
+      autoResize(ptInput);
+      autoResize(pdInput);
+    });
+  });
+
+  updateBatchConfirmSummary();
+}
+
+async function confirmBatchCreate() {
+  const confirmBtn = document.getElementById('confirm-create');
+  const previewStatusEl = document.getElementById('preview-status');
+  const confirmSummary = document.getElementById('confirm-summary');
+
+  // Validate each card: needs a project, a parent task name, and at least one subtask.
+  for (let i = 0; i < state.batchPreviews.length; i++) {
+    const p = state.batchPreviews[i];
+    if (!p.projectId) {
+      setStatus(previewStatusEl, `Task ${i + 1}: select a project before creating.`, true);
+      return;
+    }
+    p.subtasks = p.subtasks
+      .map((s) => ({ name: s.name.trim(), description: (s.description ?? '').trim() }))
+      .filter((s) => s.name);
+    if (!p.parentTaskName.trim()) {
+      setStatus(previewStatusEl, `Task ${i + 1}: parent task name cannot be empty.`, true);
+      return;
+    }
+    if (p.subtasks.length === 0) {
+      setStatus(previewStatusEl, `Task ${i + 1}: add at least one subtask before creating.`, true);
+      return;
+    }
+  }
+
+  confirmBtn.disabled = true;
+  const results = [];
+
+  // Create each task in sequence (Teamwork rejects parallel writes from the same token).
+  for (let i = 0; i < state.batchPreviews.length; i++) {
+    const p = state.batchPreviews[i];
+    setStatus(previewStatusEl, `Creating task ${i + 1} of ${state.batchPreviews.length}…`);
+    if (confirmSummary) confirmSummary.textContent = `Creating task ${i + 1} of ${state.batchPreviews.length}…`;
+
+    const payload = {
+      tasklistMode: 'new',        // batch mode always creates new tasklists
+      projectId: p.projectId,
+      tasklistName: p.tasklistName,
+      parentTaskName: p.parentTaskName.trim(),
+      parentTaskDescription: (p.parentTaskDescription ?? '').trim(),
+      subtasks: p.subtasks,
+      tags: p.tags ?? [],
+    };
+    if (p.assigneeId) payload.assigneeId = p.assigneeId;
+
+    try {
+      const res = await fetch('/api/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      results.push({ ok: res.ok, result, tasklistName: p.tasklistName, projectName: p.projectName });
+    } catch (err) {
+      results.push({ ok: false, result: { error: err.message }, tasklistName: p.tasklistName, projectName: p.projectName });
+    }
+  }
+
+  renderBatchSuccess(results);
+  showScreen('success');
 }
 
 previewParentTask.addEventListener('input', () => {
@@ -749,10 +1532,30 @@ regenerateSubmit.addEventListener('click', async () => {
 });
 
 document.getElementById('back-to-form').addEventListener('click', () => {
-  showScreen('form');
+  // Cancel any in-flight generation so it doesn't re-enable/disable the button
+  // after the user has already navigated away.
+  if (state.pendingGeneration) {
+    state.pendingGeneration.abort();
+    state.pendingGeneration = null;
+  }
+  // Defensively restore button + clear status in case we're going back mid-generate.
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = false;
+  setStatus(batchStatus, '');
+
+  // Batch mode skips pick-project, so go back to configure.
+  // Single / template mode goes back to pick-project (project already set).
+  if (state.isBatchMode || !state.selectedProject) {
+    const isAi = form.querySelector('input[name="taskMode"][value="ai-generate"]')?.checked ?? false;
+    state.isBatchMode = isAi;
+    showScreen('form');
+  } else {
+    showScreen('pick-project');
+  }
 });
 
 confirmBtn.addEventListener('click', async () => {
+  if (state.isBatchMode) { confirmBatchCreate(); return; }
   const p = state.preview;
   // Trim and re-validate — subtask names required, descriptions optional
   p.subtasks = p.subtasks
@@ -806,6 +1609,7 @@ confirmBtn.addEventListener('click', async () => {
     subtasks: p.subtasks,
     tags: p.tags,
   };
+  if (p.assigneeId) payload.assigneeId = p.assigneeId;
   if (p.tasklistMode === 'new') {
     payload.projectId = state.selectedProject.id;
     payload.tasklistName = p.tasklistName;
@@ -864,27 +1668,72 @@ function renderSuccess(result, createdProject) {
   }
 }
 
+function renderBatchSuccess(results) {
+  const succeeded = results.filter((r) => r.ok);
+  const failed = results.filter((r) => !r.ok);
+
+  const totalSubtasks = succeeded.reduce((n, r) => n + (r.result.subtaskIds?.length ?? 0), 0);
+  let summary = `Created ${succeeded.length} of ${results.length} task${results.length === 1 ? '' : 's'}`;
+  if (totalSubtasks > 0) summary += ` (${totalSubtasks} subtask${totalSubtasks === 1 ? '' : 's'} total)`;
+
+  // Show unique project names in summary
+  const projectNames = [...new Set(succeeded.map((r) => r.projectName).filter(Boolean))];
+  if (projectNames.length === 1) summary += ` in "${projectNames[0]}"`;
+  else if (projectNames.length > 1) summary += ` across ${projectNames.length} projects`;
+  summary += '.';
+  successSummary.textContent = summary;
+
+  if (failed.length > 0) {
+    successPartial.textContent = `Failed tasks:\n${failed.map((r) => `• ${r.tasklistName}: ${r.result.error}`).join('\n')}`;
+  } else {
+    successPartial.textContent = '';
+  }
+
+  // Link to the last successfully created tasklist
+  const lastOk = succeeded[succeeded.length - 1];
+  if (lastOk?.result?.tasklistUrl) {
+    successLink.href = lastOk.result.tasklistUrl;
+    successLink.textContent = 'Open last tasklist in Teamwork ↗';
+    successLink.hidden = false;
+  } else {
+    successLink.hidden = true;
+  }
+
+  successProjectLink.hidden = true; // no single project link in multi-project batch
+}
+
 document.getElementById('start-over').addEventListener('click', () => {
-  // Reset to project picker; keep project results loaded
   state.preview = null;
+  state.batchPreviews = [];
+  state.batchItems = [];
+  state.isBatchMode = false;
   state.newProjectDraft = null;
   state.selectedProject = null;
+  state.projectMembers = [];
+  state.existingTasklists = [];
   document.getElementById('notes').value = '';
   newProjectNameInput.value = '';
   newProjectDescInput.value = '';
   regenerateDesc.value = '';
+  searchInput.value = '';
   setRegeneratePanelOpen(false);
-  confirmBtn.disabled = false;
   state.selectedTemplate = TEMPLATES[0];
   aiGeneratePrompt.value = '';
   setStatus(aiGenerateStatus, '');
-  setAiGenerateMode(true);
+  setStatus(batchStatus, '');
+  assigneeSelect.innerHTML = '<option value="">— Unassigned —</option>';
+  assigneeSelect.disabled = true;
+  assigneeHint.textContent = '';
+  projectSelectedPanel.hidden = true;
+  setBatchPreviewVisible(false);
+  batchPreviewCards.innerHTML = '';
   const taskModeRadio = form.querySelector('input[name="taskMode"][value="ai-generate"]');
   if (taskModeRadio) taskModeRadio.checked = true;
   const firstTemplateRadio = form.querySelector('input[name="template"][value="email-campaign"]');
   if (firstTemplateRadio) firstTemplateRadio.checked = true;
+  setAiGenerateMode(true);
   setProjectMode('existing');
-  showScreen('pick-project');
+  showScreen('form');
 });
 
 // ===== shared helpers =====
@@ -897,8 +1746,7 @@ function setStatus(el, text, isError = false) {
 
 // ===== boot =====
 
-loadProjects('');
 updateTasklistPreview();
 setAiGenerateMode(true);
-// Initialize step indicator for the starting screen
-showScreen('pick-project');
+// Start on the configure screen (step 1)
+showScreen('form');

@@ -7,6 +7,19 @@ All notable changes to Task Builder are recorded here.
 ### Changed
 - App renamed from **Teamwork Task Tool** to **Task Builder**. Updated page
   title, h1, README, and this file.
+- **"Client type" renamed to "Contract type"** throughout the UI and AI prompts.
+  The label better reflects that the code (C/H/G) refers to the client's contract
+  structure, not a category of client. Internal variable names (`clientType`,
+  `batchClientType_*`) are unchanged.
+
+### Added
+- **Existing tasklist names passed as AI context** in `design` mode. When a PM
+  selects a project, the names of its existing tasklists are now included in the
+  `/api/preview` request and injected into the AI prompt. The model uses them to
+  derive the project's actual naming convention (prefix, contract type format,
+  task type labels) and to avoid generating exact-duplicate tasklist names.
+  No new API calls or state — `state.existingTasklists` was already populated on
+  project select.
 
 
 

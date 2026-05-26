@@ -5,6 +5,7 @@
 
 import { onRequestGet as getProjects, onRequestPost as createProject } from '../functions/api/projects.js';
 import { onRequestGet as getTasklists } from '../functions/api/projects/[projectId]/tasklists.js';
+import { onRequestGet as getMembers } from '../functions/api/projects/[projectId]/members.js';
 import { onRequestPost as createTasks } from '../functions/api/create.js';
 import { onRequestPost as previewSubtasks } from '../functions/api/preview.js';
 
@@ -24,6 +25,11 @@ export default {
     const tasklistsMatch = pathname.match(/^\/api\/projects\/([^/]+)\/tasklists\/?$/);
     if (tasklistsMatch && method === 'GET') {
       return getTasklists({ params: { projectId: tasklistsMatch[1] }, env });
+    }
+
+    const membersMatch = pathname.match(/^\/api\/projects\/([^/]+)\/members\/?$/);
+    if (membersMatch && method === 'GET') {
+      return getMembers({ params: { projectId: membersMatch[1] }, env });
     }
 
     if (pathname === '/api/create' && method === 'POST') {
