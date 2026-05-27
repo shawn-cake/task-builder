@@ -127,8 +127,12 @@ class TeamworkClient {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ 'todo-list': { name } }),
+      signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) throw new Error(`tasklist create ${res.status}: ${await res.text()}`);
+    if (!res.ok) {
+      console.error('[create] tasklist create', res.status, await res.text());
+      throw new Error(`Teamwork returned ${res.status} creating tasklist`);
+    }
     const data = await res.json();
     return {
       id: Number(data.TASKLISTID),
@@ -145,9 +149,13 @@ class TeamworkClient {
         method: 'POST',
         headers: { Authorization: this.auth, 'Content-Type': 'application/json' },
         body: JSON.stringify({ task, tags }),
+        signal: AbortSignal.timeout(10_000),
       }
     );
-    if (!res.ok) throw new Error(`task create ${res.status}: ${await res.text()}`);
+    if (!res.ok) {
+      console.error('[create] task create', res.status, await res.text());
+      throw new Error(`Teamwork returned ${res.status} creating task`);
+    }
     const data = await res.json();
     const taskId = data.task.id;
     if (assigneeId) await this.assignTask(taskId, assigneeId);
@@ -159,8 +167,12 @@ class TeamworkClient {
       method: 'PUT',
       headers: { Authorization: this.auth, 'Content-Type': 'application/json' },
       body: JSON.stringify({ 'todo-item': { 'responsible-party-id': String(assigneeId) } }),
+      signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) throw new Error(`assign ${res.status}: ${await res.text()}`);
+    if (!res.ok) {
+      console.error('[create] assign task', res.status, await res.text());
+      throw new Error(`Teamwork returned ${res.status} assigning task`);
+    }
   }
 
   async createSubtask(parentTaskId, name, description, assigneeId = null) {
@@ -172,9 +184,13 @@ class TeamworkClient {
         method: 'POST',
         headers: { Authorization: this.auth, 'Content-Type': 'application/json' },
         body: JSON.stringify({ task }),
+        signal: AbortSignal.timeout(10_000),
       }
     );
-    if (!res.ok) throw new Error(`subtask create ${res.status}: ${await res.text()}`);
+    if (!res.ok) {
+      console.error('[create] subtask create', res.status, await res.text());
+      throw new Error(`Teamwork returned ${res.status} creating subtask`);
+    }
     const data = await res.json();
     const subtaskId = data.task.id;
     if (assigneeId) await this.assignTask(subtaskId, assigneeId);

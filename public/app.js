@@ -522,8 +522,8 @@ document.getElementById('continue-to-preview').addEventListener('click', () => {
     : null;
   state.preview.assigneeId = assigneeSelect.value ? Number(assigneeSelect.value) : null;
 
+  showScreen('preview');  // must come first — autoResize needs display:block to measure scrollHeight
   renderPreview();
-  showScreen('preview');
 });
 
 form.addEventListener('submit', async (e) => {
@@ -598,6 +598,7 @@ form.addEventListener('submit', async (e) => {
           aiFallback: false,
         };
         state.isBatchMode = false;
+        state.batchItems = [];
         showScreen('pick-project');
       } else {
         // Multiple results — go straight to preview with per-card project selectors.
@@ -627,8 +628,8 @@ form.addEventListener('submit', async (e) => {
             failed: false,
           };
         }).filter(Boolean);
+        showScreen('preview');  // must come first — autoResize needs display:block to measure scrollHeight
         renderBatchPreview();
-        showScreen('preview');
       }
     } catch (err) {
       // AbortError means the user navigated away — don't show an error.
@@ -720,6 +721,8 @@ const previewNewProject = document.getElementById('preview-new-project');
 const confirmBtn = document.getElementById('confirm-create');
 
 let dragSrcIdx = null;
+// AbortControllers for per-card document click listeners — cleared on each re-render.
+let batchCardDocListeners = [];
 
 function autoResize(el) {
   el.style.height = '1px';
@@ -817,6 +820,7 @@ function renderPreview() {
     remove.textContent = '×';
     remove.addEventListener('click', () => {
       state.preview.subtasks.splice(Number(input.dataset.index), 1);
+      showScreen('preview'); // must precede renderPreview — autoResize needs display:block
       renderPreview();
     });
 
@@ -847,6 +851,7 @@ function renderPreview() {
       const [moved] = state.preview.subtasks.splice(dragSrcIdx, 1);
       state.preview.subtasks.splice(idx, 0, moved);
       dragSrcIdx = null;
+      showScreen('preview'); // must precede renderPreview — autoResize needs display:block
       renderPreview();
     });
 
@@ -931,14 +936,14 @@ const batchPreviewCards = document.getElementById('batch-preview-cards');
 const singlePreviewSummary = document.querySelector('#screen-preview .preview-summary');
 const subtasksHeaderEl = document.querySelector('#screen-preview .subtasks-header');
 const regeneratePanelContainer = document.getElementById('regenerate-panel');
-const subtastsHintEl = document.getElementById('subtasks-hint');
+const subtasksHintEl = document.getElementById('subtasks-hint');
 
 function setBatchPreviewVisible(isBatch) {
   batchPreviewCards.hidden = !isBatch;
   if (singlePreviewSummary) singlePreviewSummary.hidden = isBatch;
   if (subtasksHeaderEl) subtasksHeaderEl.hidden = isBatch;
   if (regeneratePanelContainer) regeneratePanelContainer.hidden = true;
-  if (subtastsHintEl) subtastsHintEl.hidden = isBatch;
+  if (subtasksHintEl) subtasksHintEl.hidden = isBatch;
   previewSubtasks.hidden = isBatch;
   const addStBtn = document.getElementById('add-subtask-btn');
   if (addStBtn) addStBtn.hidden = isBatch;
@@ -958,6 +963,9 @@ function updateBatchConfirmSummary() {
 }
 
 function renderBatchPreview() {
+  // Abort all document click listeners from the previous render before rebuilding.
+  batchCardDocListeners.forEach(ctrl => ctrl.abort());
+  batchCardDocListeners = [];
   setBatchPreviewVisible(true);
   batchPreviewCards.innerHTML = '';
 
@@ -1124,16 +1132,18 @@ function renderBatchPreview() {
       updateBatchConfirmSummary();
     }
 
-    // Close dropdown when clicking outside the search wrap
+    // Close dropdown when clicking outside the search wrap.
+    // Use an AbortController so the listener is cleaned up when renderBatchPreview
+    // rebuilds the cards — avoids unbounded listener accumulation on document.
     function onDocClickCard(e) {
       if (!projectSearchWrap.contains(e.target)) {
         projectSearchResults.innerHTML = '';
         setStatus(projectSearchStatus, '');
       }
     }
-    document.addEventListener('click', onDocClickCard);
-    // Clean up listener if card is later removed
-    card.addEventListener('remove', () => document.removeEventListener('click', onDocClickCard));
+    const docListenerCtrl = new AbortController();
+    batchCardDocListeners.push(docListenerCtrl);
+    document.addEventListener('click', onDocClickCard, { signal: docListenerCtrl.signal });
 
     projectPicker.appendChild(projectSelectedEl);
     projectPicker.appendChild(projectSearchWrap);
@@ -1538,6 +1548,9 @@ document.getElementById('back-to-form').addEventListener('click', () => {
     state.pendingGeneration.abort();
     state.pendingGeneration = null;
   }
+  // Clean up any batch-card document listeners from the batch preview screen.
+  batchCardDocListeners.forEach(ctrl => ctrl.abort());
+  batchCardDocListeners = [];
   // Defensively restore button + clear status in case we're going back mid-generate.
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = false;
@@ -1703,6 +1716,8 @@ function renderBatchSuccess(results) {
 }
 
 document.getElementById('start-over').addEventListener('click', () => {
+  batchCardDocListeners.forEach(ctrl => ctrl.abort());
+  batchCardDocListeners = [];
   state.preview = null;
   state.batchPreviews = [];
   state.batchItems = [];
@@ -1718,7 +1733,7 @@ document.getElementById('start-over').addEventListener('click', () => {
   searchInput.value = '';
   setRegeneratePanelOpen(false);
   state.selectedTemplate = TEMPLATES[0];
-  aiGeneratePrompt.value = '';
+  if (aiGeneratePrompt) aiGeneratePrompt.value = '';
   setStatus(aiGenerateStatus, '');
   setStatus(batchStatus, '');
   assigneeSelect.innerHTML = '<option value="">— Unassigned —</option>';

@@ -153,8 +153,9 @@ function validate(body) {
     if (body.subtasks.some((s) => typeof s !== 'string')) {
       return 'every subtask must be a string.';
     }
-  } else if (!body.description?.trim()) {
-    return `description is required for ${body.mode} mode.`;
+  } else {
+    if (!body.description?.trim()) return `description is required for ${body.mode} mode.`;
+    if (body.description.length > 8000) return 'description must be under 8 000 characters.';
   }
   return null;
 }
@@ -201,7 +202,7 @@ async function design(client, body) {
   parts.push('', "PM's description:", body.description.trim());
   const userPrompt = parts.join('\n');
 
-  const raw = await callAnthropic(client, SYSTEM_DESIGN, userPrompt, DESIGN_OUTPUT_SCHEMA);
+  const raw = await callAnthropic(client, SYSTEM_DESIGN, userPrompt, DESIGN_OUTPUT_SCHEMA, { fullDesign: true });
 
   // Safety net: ensure the contract type code is present in the tasklist name.
   // The model should include it per the system prompt, but post-process just in case.
@@ -220,7 +221,7 @@ async function design(client, body) {
   return raw;
 }
 
-async function callAnthropic(client, system, userPrompt, schema) {
+async function callAnthropic(client, system, userPrompt, schema, { fullDesign = false } = {}) {
   const result = await client.messages.create({
     model: MODEL,
     max_tokens: 2000,
@@ -240,8 +241,8 @@ async function callAnthropic(client, system, userPrompt, schema) {
     throw new Error(`model returned non-JSON: ${text.slice(0, 200)}`);
   }
 
-  // Full-design schema — return the whole object.
-  if (schema === DESIGN_OUTPUT_SCHEMA) {
+  // Full-design mode — return the whole object.
+  if (fullDesign) {
     if (!parsed?.tasklistName || !parsed?.parentTaskName || !Array.isArray(parsed?.subtasks)) {
       throw new Error('model returned an unexpected shape');
     }

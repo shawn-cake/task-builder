@@ -40,19 +40,6 @@ export default {
       return previewSubtasks({ request, env });
     }
 
-    // Diagnostic: reports whether env vars resolved at runtime.
-    // Reveals only presence + length, never values. Safe to leave in.
-    if (pathname === '/api/_diag' && method === 'GET') {
-      return Response.json({
-        TEAMWORK_DOMAIN: env.TEAMWORK_DOMAIN
-          ? { present: true, length: env.TEAMWORK_DOMAIN.length, value: env.TEAMWORK_DOMAIN }
-          : { present: false },
-        TEAMWORK_API_TOKEN: env.TEAMWORK_API_TOKEN
-          ? { present: true, length: env.TEAMWORK_API_TOKEN.length }
-          : { present: false },
-      });
-    }
-
     if (pathname.startsWith('/api/')) {
       return Response.json({ error: 'Not found' }, { status: 404 });
     }

@@ -26,6 +26,7 @@ export async function onRequestGet({ request, env }) {
   const auth = btoa(`${TEAMWORK_API_TOKEN}:x`);
   const res = await fetch(tw.toString(), {
     headers: { Authorization: `Basic ${auth}` },
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
@@ -82,13 +83,15 @@ export async function onRequestPost({ request, env }) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
     const text = await res.text();
+    console.error('[projects] create failed', res.status, text);
     return Response.json(
-      { error: `Project create failed (${res.status}): ${text}` },
-      { status: res.status === 401 ? 502 : 502 }
+      { error: `Project create failed (${res.status})` },
+      { status: 502 }
     );
   }
 

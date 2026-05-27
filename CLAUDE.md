@@ -79,6 +79,17 @@ Configure comes first so AI generation happens upfront. In batch mode (multiple 
 - Task descriptions are passed as the `description` field on the task object (plain text or HTML)
 - Members endpoint uses v3 `/projects/api/v3/projects/:id/people.json` — filters out client users and deleted members
 
+## CSS Architecture
+
+Styles use **Tailwind CDN** (`preflight: false`) alongside a hand-authored `public/styles.css`.
+
+- `styles.css` owns all base resets, design tokens (`:root` custom properties), and semantic component classes
+- Tailwind is configured with `corePlugins: { preflight: false }` — **required** because the CDN injects a `<style>` tag at runtime *after* the `<link rel="stylesheet">`, which would otherwise let Tailwind's Preflight resets (zero padding on inputs/buttons, `font-size: inherit` on headings) win the cascade
+- The Tailwind config in `index.html` registers brand colors as utility class names for ad-hoc use; design tokens are also defined as CSS custom properties in `:root` for component styles
+- Use semantic classes (`.primary`, `.ghost`, `.inline-edit`, etc.) for components; Tailwind utilities for one-off layout tweaks only
+
+Design context and token reference: `.impeccable.md` in the project root.
+
 ## Conventions
 - No TypeScript, no bundler — keep it simple; the Worker runtime handles ES modules natively
 - `state` in `app.js` is the single source of truth for all UI state
@@ -86,4 +97,4 @@ Configure comes first so AI generation happens upfront. In batch mode (multiple 
 - `state.pendingGeneration` holds the active `AbortController` for batch AI generation; always abort it before starting a new one or navigating away
 - AI output is always validated against a JSON schema before use
 - Partial Teamwork failures are surfaced to the user — never silently swallowed
-- `autoResize(el)` is synchronous — call it only after the element is attached to the live DOM; use `requestAnimationFrame` to defer if building detached nodes
+- `autoResize(el)` is synchronous — **call `showScreen()` before calling any render function that uses `autoResize`**. If the screen is `display: none` when `autoResize` runs, `scrollHeight` returns 0 and textareas get `height: 0px`, clipping all content. The correct order is always: `showScreen('preview')` → `renderPreview()` (or `renderBatchPreview()`). Use `requestAnimationFrame` to defer if building detached nodes.
